@@ -232,7 +232,8 @@ class ScenarioPackageService {
     const scenario = await scenarioDao.create({
       name: newScenarioName,
       description: packageData.scenario?.description || '',
-      api_version_id: apiVersion?.id || null
+      api_version_id: apiVersion?.id || null,
+      status: packageData.scenario?.status || 'draft'
     });
     importedItems.scenarios.push({ action: scenario_action === 'overwrite' ? 'overwritten' : 'created', id: scenario.id });
 
@@ -249,12 +250,8 @@ class ScenarioPackageService {
       }
     }
 
-    if (packageData.latest_snapshot && execution_history_action !== 'skip') {
-      const snapshot = await snapshotDao.create(scenario.id, null, packageData.latest_snapshot.data);
-      importedItems.snapshots.push({ action: 'created', id: snapshot.id });
-    }
-
     if (packageData.execution_history_summary && execution_history_action === 'keep') {
+      let lastExecutionId = null;
       for (const exec of packageData.execution_history_summary) {
         const createdExecution = await executionDao.create(scenario.id);
         await executionDao.update(createdExecution.id, {
@@ -265,7 +262,16 @@ class ScenarioPackageService {
         });
         importedItems.executions = importedItems.executions || [];
         importedItems.executions.push({ action: 'restored', id: createdExecution.id });
+        lastExecutionId = createdExecution.id;
       }
+      
+      if (packageData.latest_snapshot && execution_history_action !== 'skip' && lastExecutionId) {
+        const snapshot = await snapshotDao.create(scenario.id, lastExecutionId, packageData.latest_snapshot.data);
+        importedItems.snapshots.push({ action: 'created', id: snapshot.id });
+      }
+    } else if (packageData.latest_snapshot && execution_history_action !== 'skip') {
+      const snapshot = await snapshotDao.create(scenario.id, null, packageData.latest_snapshot.data);
+      importedItems.snapshots.push({ action: 'created', id: snapshot.id });
     }
 
     return {

@@ -5,13 +5,14 @@ class ScenarioDao {
   create(scenarioData) {
     return new Promise((resolve, reject) => {
       const id = uuidv4();
-      const { name, description, api_version_id } = scenarioData;
+      const { name, description, api_version_id, status } = scenarioData;
+      const finalStatus = status || 'draft';
       db.run(
         'INSERT INTO scenarios (id, name, description, api_version_id, status) VALUES (?, ?, ?, ?, ?)',
-        [id, name, description || '', api_version_id, 'draft'],
+        [id, name, description || '', api_version_id, finalStatus],
         function(err) {
           if (err) reject(err);
-          else resolve({ id, name, description, api_version_id, status: 'draft' });
+          else resolve({ id, name, description, api_version_id, status: finalStatus });
         }
       );
     });
