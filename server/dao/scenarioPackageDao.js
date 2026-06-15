@@ -5,10 +5,13 @@ class ScenarioPackageDao {
   savePackage(packageData) {
     return new Promise((resolve, reject) => {
       const id = uuidv4();
-      const { scenario_id, action_type, archived_scenario_id } = packageData;
+      const { scenario_id, action_type, archived_scenario_id, imported_items } = packageData;
       db.run(
         'INSERT INTO scenario_packages (id, scenario_id, package_data, action_type, archived_scenario_id) VALUES (?, ?, ?, ?, ?)',
-        [id, scenario_id || null, JSON.stringify(packageData.package_data), action_type, archived_scenario_id || null],
+        [id, scenario_id || null, JSON.stringify({ 
+          package_data: packageData.package_data,
+          imported_items: imported_items || {}
+        }), action_type, archived_scenario_id || null],
         function(err) {
           if (err) reject(err);
           else resolve({ id, scenario_id, action_type, archived_scenario_id });
@@ -20,12 +23,19 @@ class ScenarioPackageDao {
   getLatestImport() {
     return new Promise((resolve, reject) => {
       db.get(
-        'SELECT * FROM scenario_packages WHERE action_type = ? ORDER BY created_at DESC LIMIT 1',
+        'SELECT *, rowid as seq FROM scenario_packages WHERE action_type = ? ORDER BY seq DESC LIMIT 1',
         ['import'],
         (err, row) => {
           if (err) reject(err);
           else if (!row) resolve(null);
-          else resolve({ ...row, package_data: JSON.parse(row.package_data) });
+          else {
+            const parsed = JSON.parse(row.package_data);
+            resolve({ 
+              ...row, 
+              package_data: parsed.package_data,
+              imported_items: parsed.imported_items || {}
+            });
+          }
         }
       );
     });

@@ -294,11 +294,12 @@ class ScenarioPackageService {
     return await importLogDao.getLatest();
   }
 
-  async savePackageForRollback(scenarioId, packageData) {
+  async savePackageForRollback(scenarioId, packageData, importedItems) {
     return await scenarioPackageDao.savePackage({
       scenario_id: scenarioId,
       action_type: 'import',
-      package_data: packageData
+      package_data: packageData,
+      imported_items: importedItems
     });
   }
 
@@ -314,42 +315,83 @@ class ScenarioPackageService {
     }
 
     const packageData = latestPackage.package_data;
+    const importedItems = latestPackage.imported_items || {};
     const originalScenarioName = packageData.scenario?.name;
     const latestPackageId = latestPackage.id;
     
     let scenarioId = latestPackage.scenario_id;
-    let apiVersionId = null;
+    let cleanedResources = {
+      scenario_id: null,
+      api_version_id: null,
+      field_mappings: [],
+      compatibility_strategies: [],
+      failure_injections: [],
+      snapshots: [],
+      executions: []
+    };
     
     if (scenarioId) {
       const importedScenario = await scenarioDao.getById(scenarioId);
       
       if (importedScenario) {
-        apiVersionId = importedScenario.api_version_id;
+        if (importedItems.failure_injections) {
+          for (const injection of importedItems.failure_injections) {
+            try {
+              await failureInjectionDao.delete(injection.id);
+              cleanedResources.failure_injections.push(injection.id);
+            } catch (e) {}
+          }
+        }
         
-        if (apiVersionId) {
-          const injections = await failureInjectionDao.getByScenarioId(scenarioId);
-          for (const injection of injections) {
-            await failureInjectionDao.delete(injection.id);
+        if (importedItems.snapshots) {
+          for (const snapshot of importedItems.snapshots) {
+            try {
+              await snapshotDao.delete(snapshot.id);
+              cleanedResources.snapshots.push(snapshot.id);
+            } catch (e) {}
           }
-          
-          const snapshots = await snapshotDao.getByScenarioId(scenarioId);
-          for (const snapshot of snapshots) {
-            await snapshotDao.delete(snapshot.id);
+        }
+        
+        if (importedItems.executions) {
+          for (const execution of importedItems.executions) {
+            try {
+              await executionDao.delete(execution.id);
+              cleanedResources.executions.push(execution.id);
+            } catch (e) {}
           }
-          
-          const executions = await executionDao.getByScenarioId(scenarioId);
-          for (const execution of executions) {
-            await executionDao.delete(execution.id);
-          }
-          
-          await fieldMappingDao.deleteByApiVersionId(apiVersionId);
-          await compatibilityStrategyDao.deleteByApiVersionId(apiVersionId);
-          await apiVersionDao.delete(apiVersionId);
         }
         
         await scenarioDao.delete(scenarioId);
+        cleanedResources.scenario_id = scenarioId;
       } else {
         scenarioId = null;
+      }
+    }
+
+    if (importedItems.api_versions && importedItems.api_versions.length > 0) {
+      for (const apiVersion of importedItems.api_versions) {
+        if (apiVersion.action === 'created') {
+          try {
+            const fieldMappings = importedItems.field_mappings || [];
+            for (const mapping of fieldMappings) {
+              try {
+                await fieldMappingDao.delete(mapping.id);
+                cleanedResources.field_mappings.push(mapping.id);
+              } catch (e) {}
+            }
+            
+            const strategies = importedItems.compatibility_strategies || [];
+            for (const strategy of strategies) {
+              try {
+                await compatibilityStrategyDao.delete(strategy.id);
+                cleanedResources.compatibility_strategies.push(strategy.id);
+              } catch (e) {}
+            }
+            
+            await apiVersionDao.delete(apiVersion.id);
+            cleanedResources.api_version_id = apiVersion.id;
+          } catch (e) {}
+        }
       }
     }
 
@@ -361,10 +403,7 @@ class ScenarioPackageService {
       rolled_back_scenario_name: originalScenarioName,
       had_package_record: true,
       had_scenario: !!scenarioId,
-      cleaned_resources: {
-        api_version_id: apiVersionId,
-        scenario_id: scenarioId
-      }
+      cleaned_resources: cleanedResources
     };
   }
 

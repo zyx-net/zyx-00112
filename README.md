@@ -339,6 +339,37 @@ npm start
 
 ## 修复记录
 
+### v1.2.2 场景包导入闭环修复 (2026-06-16)
+
+#### 修复的问题
+
+1. **Schema不兼容时空decisions仍能导入**
+   - **问题**: 检测到 schema 不兼容冲突后，空 `decisions: {}` 仍能继续导入，生成新场景和重复版本
+   - **修复**: [scenarioPackages.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/scenarioPackages.js#L47-L68) - 必须提供 `schema_incompatible: 'force_create'` 决策才能导入
+
+2. **连续导入后撤销只删表面对象**
+   - **问题**: 连续导入两次后，撤销只删除了场景，未删除同次导入创建的 API 版本、快照、执行历史等
+   - **修复**: 
+     - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L297-L302) - 导入时保存创建的资源ID
+     - [scenarioPackageDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/scenarioPackageDao.js#L5-L30) - 存储 imported_items
+     - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L309-L408) - 撤销时精确删除导入创建的资源
+
+3. **SQLite时间戳精度导致撤销顺序错误**
+   - **问题**: SQLite 的 CURRENT_TIMESTAMP 精度只到秒，导致同一秒内的导入无法区分顺序
+   - **修复**: [scenarioPackageDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/scenarioPackageDao.js#L24) - 使用 rowid 排序确保正确顺序
+
+#### 新增测试
+
+- **场景包导入修复测试**: [scenario-import-fix.js](file:///d:/workSpace/AI__SPACE/zyx-00112/test/scenario-import-fix.js)
+  - Test E: Schema不兼容时空decisions被拒绝
+  - Test F: 连续导入后撤销只回退最近一次
+
+#### 验证结果
+
+- 原有回归测试: 10/10 通过
+- 场景包回归测试: 4/4 通过
+- 场景包导入修复测试: 2/2 通过
+
 ### v1.2.1 场景包链路修复 (2026-06-16)
 
 #### 修复的问题

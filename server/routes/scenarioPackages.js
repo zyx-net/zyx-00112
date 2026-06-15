@@ -46,12 +46,21 @@ router.post('/import', async (req, res) => {
     
     if (conflicts.has_conflicts) {
       const hasDuplicateName = conflicts.issues.some(i => i.type === 'duplicate_name');
+      const hasSchemaIncompatible = conflicts.issues.some(i => i.type === 'schema_incompatible');
       
       if (hasDuplicateName && (!decisions || !decisions.hasOwnProperty('duplicate_name'))) {
         return res.status(409).json({
           error: '存在同名场景冲突，需要决策',
           conflicts: conflicts,
           required_decisions: ['duplicate_name']
+        });
+      }
+      
+      if (hasSchemaIncompatible && (!decisions || decisions.schema_incompatible !== 'force_create')) {
+        return res.status(409).json({
+          error: '存在Schema不兼容冲突，需要明确决策',
+          conflicts: conflicts,
+          required_decisions: ['schema_incompatible']
         });
       }
     }
@@ -73,7 +82,8 @@ router.post('/import', async (req, res) => {
 
     await scenarioPackageService.savePackageForRollback(
       result.new_scenario_id,
-      package_data
+      package_data,
+      result.imported_items
     );
 
     res.status(201).json({
