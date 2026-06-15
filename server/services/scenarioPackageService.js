@@ -29,11 +29,25 @@ class ScenarioPackageService {
     
     const failureInjections = await failureInjectionDao.getByScenarioId(scenarioId);
     const executions = await executionDao.getByScenarioId(scenarioId);
+    
+    const sortedExecutions = [...executions].sort((a, b) => {
+      const timeA = new Date(a.start_time || a.created_at).getTime();
+      const timeB = new Date(b.start_time || b.created_at).getTime();
+      return timeB - timeA;
+    });
+    
+    const latestSuccessfulExecution = sortedExecutions.find(e => e.status === 'success' || e.status === 'completed');
+    
     const latestSnapshot = await snapshotDao.getLatestByScenarioId(scenarioId);
+    
+    const correctSnapshot = latestSnapshot && latestSuccessfulExecution 
+      ? await snapshotDao.getByExecutionId(latestSuccessfulExecution.id)
+      : latestSnapshot;
 
     const packageData = {
-      version: '1.0.0',
+      version: '1.1.0',
       exported_at: new Date().toISOString(),
+      original_scenario_id: scenario.id,
       scenario: {
         name: scenario.name,
         description: scenario.description,
@@ -49,18 +63,26 @@ class ScenarioPackageService {
       field_mappings: fieldMappings,
       compatibility_strategies: compatibilityStrategies,
       failure_injections: failureInjections,
-      execution_history_summary: executions.map(e => ({
+      execution_history_summary: sortedExecutions.map(e => ({
         id: e.id,
         status: e.status,
         start_time: e.start_time,
-        end_time: e.end_time
+        end_time: e.end_time,
+        created_at: e.created_at
       })),
-      latest_snapshot: latestSnapshot ? {
-        id: latestSnapshot.id,
-        execution_id: latestSnapshot.execution_id,
-        data: latestSnapshot.data,
-        created_at: latestSnapshot.created_at
-      } : null
+      latest_successful_execution_id: latestSuccessfulExecution?.id || null,
+      latest_snapshot: correctSnapshot ? {
+        id: correctSnapshot.id,
+        execution_id: correctSnapshot.execution_id,
+        data: correctSnapshot.data,
+        created_at: correctSnapshot.created_at
+      } : null,
+      metadata: {
+        total_executions: executions.length,
+        completed_executions: executions.filter(e => e.status === 'success' || e.status === 'completed').length,
+        snapshot_count: (await snapshotDao.getByScenarioId(scenarioId)).length,
+        exported_by: 'scenario-package-service'
+      }
     };
 
     return packageData;
@@ -87,7 +109,9 @@ class ScenarioPackageService {
           id: existingByName.id,
           name: existingByName.name,
           status: existingByName.status
-        }
+        },
+        can_save_as: true,
+        can_replace: true
       });
     }
 
@@ -132,7 +156,7 @@ class ScenarioPackageService {
 
     if (existingByName) {
       const executions = await executionDao.getByScenarioId(existingByName.id);
-      const hasCompleted = executions.some(e => e.status === 'completed');
+      const hasCompleted = executions.some(e => e.status === 'success' || e.status === 'completed');
       
       if (hasCompleted) {
         conflicts.has_conflicts = true;
@@ -140,7 +164,12 @@ class ScenarioPackageService {
           type: 'has_execution_history',
           message: `同名场景已有成功执行记录`,
           execution_count: executions.length,
-          completed_count: executions.filter(e => e.status === 'completed').length
+          completed_count: executions.filter(e => e.status === 'success' || e.status === 'completed').length,
+          latest_execution: executions[0] ? {
+            id: executions[0].id,
+            status: executions[0].status,
+            start_time: executions[0].start_time
+          } : null
         });
       }
     }
@@ -163,24 +192,53 @@ class ScenarioPackageService {
       compatibility_strategies: [],
       failure_injections: [],
       snapshots: [],
-      skipped: []
+      executions: [],
+      meta: {
+        restored_execution_id: null,
+        restored_snapshot_id: null,
+        original_scenario_id: packageData.original_scenario_id || null,
+        original_latest_execution_id: packageData.latest_successful_execution_id || null
+      }
     };
 
     let newScenarioName = packageData.scenario?.name;
+    let originalScenarioStatus = packageData.scenario?.status;
+    let hasCompletedExecution = false;
+    let scenarioAction = decisions.scenario_action || 'save_as';
     
-    if (conflict_issues.some(i => i.type === 'duplicate_name') && scenario_action === 'save_as') {
-      newScenarioName = `${packageData.scenario.name}_imported_${Date.now()}`;
-    } else if (conflict_issues.some(i => i.type === 'duplicate_name') && scenario_action === 'overwrite') {
-      const existingScenario = await scenarioDao.getAll();
-      const toOverwrite = existingScenario.find(s => s.name === packageData.scenario?.name);
-      if (toOverwrite) {
-        const archived = await archivedScenarioDao.archive(toOverwrite.id, toOverwrite);
-        await scenarioDao.delete(toOverwrite.id);
-        importedItems.skipped.push({
-          type: 'scenario_overwritten',
-          original_id: toOverwrite.id,
-          archived_id: archived.id
-        });
+    if (conflict_issues.some(i => i.type === 'duplicate_name')) {
+      if (scenarioAction === 'save_as') {
+        newScenarioName = `${packageData.scenario.name}_imported_${Date.now()}`;
+      } else if (scenarioAction === 'replace') {
+        const existingScenario = await scenarioDao.getAll();
+        const toOverwrite = existingScenario.find(s => s.name === packageData.scenario?.name);
+        if (toOverwrite) {
+          const archived = await archivedScenarioDao.archive(toOverwrite.id, toOverwrite);
+          
+          const existingExecutions = await executionDao.getByScenarioId(toOverwrite.id);
+          for (const exec of existingExecutions) {
+            await executionDao.delete(exec.id);
+          }
+          
+          const existingSnapshots = await snapshotDao.getByScenarioId(toOverwrite.id);
+          for (const snap of existingSnapshots) {
+            await snapshotDao.delete(snap.id);
+          }
+          
+          const existingInjections = await failureInjectionDao.getByScenarioId(toOverwrite.id);
+          for (const inj of existingInjections) {
+            await failureInjectionDao.delete(inj.id);
+          }
+          
+          await scenarioDao.delete(toOverwrite.id);
+          importedItems.skipped = importedItems.skipped || [];
+          importedItems.skipped.push({
+            type: 'scenario_replaced',
+            original_id: toOverwrite.id,
+            archived_id: archived.id,
+            archived_at: new Date().toISOString()
+          });
+        }
       }
     }
 
@@ -229,13 +287,35 @@ class ScenarioPackageService {
       }
     }
 
+    if (packageData.execution_history_summary && packageData.execution_history_summary.length > 0) {
+      const sortedExecutions = [...packageData.execution_history_summary].sort((a, b) => {
+        const timeA = new Date(a.start_time || a.created_at).getTime();
+        const timeB = new Date(b.start_time || b.created_at).getTime();
+        return timeA - timeB;
+      });
+      
+      hasCompletedExecution = sortedExecutions.some(e => e.status === 'success' || e.status === 'completed');
+    }
+
+    let finalScenarioStatus = 'draft';
+    if (hasCompletedExecution) {
+      finalScenarioStatus = 'completed';
+    } else if (execution_history_action !== 'skip' && packageData.execution_history_summary?.length > 0) {
+      const hasAnyExecution = packageData.execution_history_summary.some(e => e.status);
+      if (hasAnyExecution) {
+        finalScenarioStatus = packageData.execution_history_summary[packageData.execution_history_summary.length - 1]?.status || 'draft';
+      }
+    } else if (originalScenarioStatus) {
+      finalScenarioStatus = originalScenarioStatus;
+    }
+
     const scenario = await scenarioDao.create({
       name: newScenarioName,
       description: packageData.scenario?.description || '',
       api_version_id: apiVersion?.id || null,
-      status: packageData.scenario?.status || 'draft'
+      status: finalScenarioStatus
     });
-    importedItems.scenarios.push({ action: scenario_action === 'overwrite' ? 'overwritten' : 'created', id: scenario.id });
+    importedItems.scenarios.push({ action: scenarioAction === 'replace' ? 'replaced' : 'created', id: scenario.id });
 
     if (packageData.failure_injections?.length > 0) {
       for (const injection of packageData.failure_injections) {
@@ -250,9 +330,18 @@ class ScenarioPackageService {
       }
     }
 
-    if (packageData.execution_history_summary && execution_history_action === 'keep') {
+    if (packageData.execution_history_summary?.length > 0) {
+      const sortedExecutions = [...packageData.execution_history_summary].sort((a, b) => {
+        const timeA = new Date(a.start_time || a.created_at).getTime();
+        const timeB = new Date(b.start_time || b.created_at).getTime();
+        return timeA - timeB;
+      });
+      
+      const latestSuccessfulOriginalId = [...sortedExecutions].reverse().find(e => e.status === 'success' || e.status === 'completed')?.id 
+        || sortedExecutions[sortedExecutions.length - 1]?.id;
+      
       let lastExecutionId = null;
-      for (const exec of packageData.execution_history_summary) {
+      for (const exec of sortedExecutions) {
         const createdExecution = await executionDao.create(scenario.id);
         await executionDao.update(createdExecution.id, {
           status: exec.status,
@@ -260,25 +349,55 @@ class ScenarioPackageService {
           end_time: exec.end_time,
           logs: null
         });
-        importedItems.executions = importedItems.executions || [];
-        importedItems.executions.push({ action: 'restored', id: createdExecution.id });
+        importedItems.executions.push({ 
+          action: 'restored', 
+          id: createdExecution.id,
+          original_id: exec.id,
+          status: exec.status,
+          is_latest_successful: exec.id === latestSuccessfulOriginalId
+        });
         lastExecutionId = createdExecution.id;
+        
+        if (exec.id === latestSuccessfulOriginalId) {
+          importedItems.meta.restored_execution_id = createdExecution.id;
+        }
       }
       
       if (packageData.latest_snapshot && execution_history_action !== 'skip' && lastExecutionId) {
-        const snapshot = await snapshotDao.create(scenario.id, lastExecutionId, packageData.latest_snapshot.data);
-        importedItems.snapshots.push({ action: 'created', id: snapshot.id });
+        let snapshotExecutionId = lastExecutionId;
+        
+        if (packageData.latest_successful_execution_id && importedItems.meta.restored_execution_id) {
+          snapshotExecutionId = importedItems.meta.restored_execution_id;
+        }
+        
+        const snapshot = await snapshotDao.create(scenario.id, snapshotExecutionId, packageData.latest_snapshot.data);
+        importedItems.snapshots = [{
+          action: 'created', 
+          id: snapshot.id,
+          execution_id: snapshotExecutionId,
+          original_execution_id: packageData.latest_snapshot.execution_id
+        }];
+        importedItems.meta.restored_snapshot_id = snapshot.id;
       }
     } else if (packageData.latest_snapshot && execution_history_action !== 'skip') {
       const snapshot = await snapshotDao.create(scenario.id, null, packageData.latest_snapshot.data);
-      importedItems.snapshots.push({ action: 'created', id: snapshot.id });
+      importedItems.snapshots.push({ action: 'created', id: snapshot.id, execution_id: null });
+      importedItems.meta.restored_snapshot_id = snapshot.id;
     }
 
     return {
       success: true,
       imported_items: importedItems,
       new_scenario_id: scenario.id,
-      new_scenario_name: newScenarioName
+      new_scenario_name: newScenarioName,
+      restored_status: finalScenarioStatus,
+      traceability: {
+        original_scenario_id: packageData.original_scenario_id || null,
+        original_latest_execution_id: packageData.latest_successful_execution_id || null,
+        restored_execution_id: importedItems.meta.restored_execution_id || null,
+        restored_snapshot_id: importedItems.meta.restored_snapshot_id || null,
+        execution_count: packageData.execution_history_summary?.length || 0
+      }
     };
   }
 
@@ -424,7 +543,7 @@ class ScenarioPackageService {
       result.push({
         ...scenario,
         execution_count: executions.length,
-        completed_count: executions.filter(e => e.status === 'completed').length,
+        completed_count: executions.filter(e => e.status === 'success' || e.status === 'completed').length,
         snapshot_count: snapshots.length,
         latest_execution: executions[0] || null,
         latest_snapshot: snapshots[0] || null

@@ -40,12 +40,27 @@ class RollbackService {
 
   async getRollbackHistory(scenarioId) {
     const snapshots = await snapshotDao.getByScenarioId(scenarioId);
+    const executions = await executionDao.getByScenarioId(scenarioId);
+    
+    const executionMap = {};
+    for (const exec of executions) {
+      executionMap[exec.id] = {
+        id: exec.id,
+        status: exec.status,
+        start_time: exec.start_time,
+        end_time: exec.end_time,
+        created_at: exec.created_at
+      };
+    }
+    
     return snapshots.map(snapshot => ({
       id: snapshot.id,
       scenarioId: snapshot.scenario_id,
       executionId: snapshot.execution_id,
+      execution: snapshot.execution_id ? executionMap[snapshot.execution_id] : null,
       createdAt: snapshot.created_at,
-      dataPreview: JSON.stringify(snapshot.data).substring(0, 100) + '...'
+      dataPreview: JSON.stringify(snapshot.data).substring(0, 100) + '...',
+      isLatest: snapshot.created_at === snapshots[0]?.created_at
     }));
   }
 

@@ -48,12 +48,19 @@ router.post('/import', async (req, res) => {
       const hasDuplicateName = conflicts.issues.some(i => i.type === 'duplicate_name');
       const hasSchemaIncompatible = conflicts.issues.some(i => i.type === 'schema_incompatible');
       
-      if (hasDuplicateName && (!decisions || !decisions.hasOwnProperty('duplicate_name'))) {
-        return res.status(409).json({
-          error: '存在同名场景冲突，需要决策',
-          conflicts: conflicts,
-          required_decisions: ['duplicate_name']
-        });
+      if (hasDuplicateName) {
+        const scenarioAction = decisions.scenario_action || decisions.duplicate_name;
+        if (!scenarioAction || (scenarioAction !== 'save_as' && scenarioAction !== 'replace')) {
+          return res.status(409).json({
+            error: '存在同名场景冲突，需要决策',
+            conflicts: conflicts,
+            required_decisions: ['scenario_action'],
+            supported_actions: {
+              save_as: '另存为新场景（推荐）',
+              replace: '覆盖现有场景'
+            }
+          });
+        }
       }
       
       if (hasSchemaIncompatible && (!decisions || decisions.schema_incompatible !== 'force_create')) {
@@ -66,18 +73,31 @@ router.post('/import', async (req, res) => {
     }
 
     const importDecisions = {
-      ...decisions,
+      scenario_action: decisions.scenario_action || decisions.duplicate_name || 'save_as',
+      api_version_action: decisions.api_version_action || 'create',
+      execution_history_action: decisions.execution_history_action || 'keep',
       conflict_issues: conflicts.issues
     };
 
     const result = await scenarioPackageService.importScenario(package_data, importDecisions);
+    
+    const logDetails = {
+      ...result,
+      traceability: result.traceability,
+      restored_execution_id: result.traceability?.restored_execution_id || null,
+      restored_snapshot_id: result.traceability?.restored_snapshot_id || null,
+      original_latest_execution_id: result.traceability?.original_latest_execution_id || null,
+      execution_count: result.traceability?.execution_count || 0,
+      scenario_action: importDecisions.scenario_action,
+      execution_history_action: importDecisions.execution_history_action
+    };
     
     const log = await scenarioPackageService.recordImport(
       result.new_scenario_id,
       package_data.scenario?.name || 'unknown',
       decisions || {},
       'success',
-      result
+      logDetails
     );
 
     await scenarioPackageService.savePackageForRollback(
@@ -89,7 +109,8 @@ router.post('/import', async (req, res) => {
     res.status(201).json({
       success: true,
       result: result,
-      import_log_id: log.id
+      import_log_id: log.id,
+      traceability: result.traceability
     });
   } catch (error) {
     res.status(500).json({ 
@@ -147,17 +168,31 @@ router.post('/rollback', async (req, res) => {
   try {
     const result = await scenarioPackageService.rollbackLastImport();
     
+    const rollbackDetails = {
+      ...result,
+      undone_execution_ids: result.cleaned_resources?.executions || [],
+      undone_snapshot_ids: result.cleaned_resources?.snapshots || [],
+      undone_scenario_id: result.rolled_back_scenario_id,
+      undone_scenario_name: result.rolled_back_scenario_name
+    };
+    
     await scenarioPackageService.recordImport(
       'rollback',
       'system',
       { action: 'rollback' },
       'success',
-      result
+      rollbackDetails
     );
 
     res.json({
       success: true,
-      result: result
+      result: result,
+      traceability: {
+        undone_execution_ids: result.cleaned_resources?.executions || [],
+        undone_snapshot_ids: result.cleaned_resources?.snapshots || [],
+        undone_scenario_id: result.rolled_back_scenario_id,
+        undone_scenario_name: result.rolled_back_scenario_name
+      }
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
