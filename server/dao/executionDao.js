@@ -60,6 +60,15 @@ class ExecutionDao {
       );
     });
   }
+
+  delete(id) {
+    return new Promise((resolve, reject) => {
+      db.run('DELETE FROM executions WHERE id = ?', [id], function(err) {
+        if (err) reject(err);
+        else resolve({ success: this.changes > 0 });
+      });
+    });
+  }
 }
 
 module.exports = new ExecutionDao();

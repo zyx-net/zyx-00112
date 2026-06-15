@@ -6,6 +6,15 @@ const validationService = require('../services/validationService');
 router.post('/export/:scenarioId', async (req, res) => {
   try {
     const packageData = await scenarioPackageService.exportScenario(req.params.scenarioId);
+    
+    await scenarioPackageService.recordImport(
+      req.params.scenarioId,
+      'export',
+      { scenario_id: req.params.scenarioId },
+      'export',
+      { package_version: packageData.version, exported_at: packageData.exported_at }
+    );
+    
     res.json({
       success: true,
       package: packageData
@@ -35,11 +44,16 @@ router.post('/import', async (req, res) => {
 
     const conflicts = await scenarioPackageService.checkConflicts(package_data);
     
-    if (conflicts.has_conflicts && !decisions) {
-      return res.status(409).json({
-        error: '存在冲突，需要决策',
-        conflicts: conflicts
-      });
+    if (conflicts.has_conflicts) {
+      const hasDuplicateName = conflicts.issues.some(i => i.type === 'duplicate_name');
+      
+      if (hasDuplicateName && (!decisions || !decisions.hasOwnProperty('duplicate_name'))) {
+        return res.status(409).json({
+          error: '存在同名场景冲突，需要决策',
+          conflicts: conflicts,
+          required_decisions: ['duplicate_name']
+        });
+      }
     }
 
     const importDecisions = {

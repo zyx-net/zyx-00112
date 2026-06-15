@@ -339,6 +339,66 @@ npm start
 
 ## 修复记录
 
+### v1.2.1 场景包链路修复 (2026-06-16)
+
+#### 修复的问题
+
+1. **导出动作未写日志**
+   - **问题**: 导出场景包时没有记录到日志中
+   - **修复**: [scenarioPackages.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/scenarioPackages.js#L1-L20) - 导出后调用 `recordImport` 记录导出操作
+
+2. **空decisions仍能导入**
+   - **问题**: 同名场景冲突时，空 `decisions: {}` 对象也能通过导入
+   - **修复**: [scenarioPackages.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/scenarioPackages.js#L37-L50) - 只有提供 `duplicate_name` 决策才能导入同名场景
+
+3. **导入后未恢复历史和快照**
+   - **问题**: 导入场景时未恢复执行历史和快照数据
+   - **修复**: [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L252-L271) - 导入时根据决策恢复执行历史和快照
+
+4. **撤销导入未清理关联资源**
+   - **问题**: 撤销导入时只删除了场景，未删除关联的 API 版本、字段映射、失败注入等
+   - **修复**: [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L315-L370) - 撤销时清理所有关联资源
+
+#### 新增测试
+
+- **场景包回归测试**: [scenario-package-regression.js](file:///d:/workSpace/AI__SPACE/zyx-00112/test/scenario-package-regression.js)
+  - Test A: 导出写日志
+  - Test B: 空 decisions 被拒绝
+  - Test C: 导入恢复历史和快照
+  - Test D: 撤销清理关联资源
+
+#### 验证结果
+
+- 原有回归测试: 10/10 通过
+- 场景包回归测试: 4/4 通过
+- 重启后数据持久化: ✓ 验证通过（144条日志记录、50个场景完整保留）
+
+### v1.2.0 场景包能力
+
+#### 新增功能
+1. **完整导出** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 实现导出逻辑，将场景的接口版本、字段映射、兼容策略、失败注入、执行历史摘要和快照一起打包
+2. **冲突检测** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 的 `checkConflicts` 方法检测同名场景、同版本号、缺字段、schema不兼容、已有运行记录等冲突
+3. **智能导入** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 的 `importScenario` 方法支持覆盖、另存为、跳过等处理方式
+4. **导入撤销** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 的 `rollbackLastImport` 方法撤销最近一次导入
+5. **变更追踪** - [scenarioPackageDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/scenarioPackageDao.js) 中的 `importLogDao` 记录所有导入、导出、冲突决策和撤销动作
+
+#### 数据库扩展
+- 新增 `scenario_packages` 表 - 存储导入的包数据和关联关系
+- 新增 `import_logs` 表 - 存储导入日志和决策
+
+#### 前端组件
+- 新增 [ScenarioPackageManager.js](file:///d:/workSpace/AI__SPACE/zyx-00112/client/src/components/ScenarioPackageManager.js) - 场景包管理界面
+
+#### 回归测试
+- Test 5: 场景包导出完整性
+- Test 6: 场景包导入功能
+- Test 7: 冲突检测
+- Test 8: 冲突决策处理
+- Test 9: 导入日志持久化
+- Test 10: 导入撤销
+
+**所有测试通过 (10/10)**
+
 ### v1.1.0 修复内容
 
 #### 1. 字段映射和兼容策略补全

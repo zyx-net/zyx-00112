@@ -254,6 +254,20 @@ class ScenarioPackageService {
       importedItems.snapshots.push({ action: 'created', id: snapshot.id });
     }
 
+    if (packageData.execution_history_summary && execution_history_action === 'keep') {
+      for (const exec of packageData.execution_history_summary) {
+        const createdExecution = await executionDao.create(scenario.id);
+        await executionDao.update(createdExecution.id, {
+          status: exec.status,
+          start_time: exec.start_time,
+          end_time: exec.end_time,
+          logs: null
+        });
+        importedItems.executions = importedItems.executions || [];
+        importedItems.executions.push({ action: 'restored', id: createdExecution.id });
+      }
+    }
+
     return {
       success: true,
       imported_items: importedItems,
@@ -301,25 +315,56 @@ class ScenarioPackageService {
 
     const packageData = latestPackage.package_data;
     const originalScenarioName = packageData.scenario?.name;
+    const latestPackageId = latestPackage.id;
     
-    if (!latestPackage.scenario_id) {
-      throw new Error('没有关联的场景ID');
+    let scenarioId = latestPackage.scenario_id;
+    let apiVersionId = null;
+    
+    if (scenarioId) {
+      const importedScenario = await scenarioDao.getById(scenarioId);
+      
+      if (importedScenario) {
+        apiVersionId = importedScenario.api_version_id;
+        
+        if (apiVersionId) {
+          const injections = await failureInjectionDao.getByScenarioId(scenarioId);
+          for (const injection of injections) {
+            await failureInjectionDao.delete(injection.id);
+          }
+          
+          const snapshots = await snapshotDao.getByScenarioId(scenarioId);
+          for (const snapshot of snapshots) {
+            await snapshotDao.delete(snapshot.id);
+          }
+          
+          const executions = await executionDao.getByScenarioId(scenarioId);
+          for (const execution of executions) {
+            await executionDao.delete(execution.id);
+          }
+          
+          await fieldMappingDao.deleteByApiVersionId(apiVersionId);
+          await compatibilityStrategyDao.deleteByApiVersionId(apiVersionId);
+          await apiVersionDao.delete(apiVersionId);
+        }
+        
+        await scenarioDao.delete(scenarioId);
+      } else {
+        scenarioId = null;
+      }
     }
 
-    const importedScenario = await scenarioDao.getById(latestPackage.scenario_id);
-    
-    if (!importedScenario) {
-      throw new Error('找不到最近导入的场景');
-    }
-
-    await scenarioDao.delete(importedScenario.id);
-
-    await scenarioPackageDao.delete(latestPackage.id);
+    await scenarioPackageDao.delete(latestPackageId);
 
     return {
       success: true,
-      rolled_back_scenario_id: importedScenario.id,
-      rolled_back_scenario_name: importedScenario.name
+      rolled_back_scenario_id: scenarioId,
+      rolled_back_scenario_name: originalScenarioName,
+      had_package_record: true,
+      had_scenario: !!scenarioId,
+      cleaned_resources: {
+        api_version_id: apiVersionId,
+        scenario_id: scenarioId
+      }
     };
   }
 
