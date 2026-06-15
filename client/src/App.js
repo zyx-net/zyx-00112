@@ -6,6 +6,7 @@ import ScenarioManager from './components/ScenarioManager';
 import FailureInjectionManager from './components/FailureInjectionManager';
 import ExecutionPanel from './components/ExecutionPanel';
 import RollbackManager from './components/RollbackManager';
+import ScenarioPackageManager from './components/ScenarioPackageManager';
 
 function App() {
   const [activeTab, setActiveTab] = useState('versions');
@@ -22,6 +23,8 @@ function App() {
         return <ExecutionPanel />;
       case 'rollback':
         return <RollbackManager />;
+      case 'packages':
+        return <ScenarioPackageManager />;
       default:
         return <ApiVersionManager />;
     }

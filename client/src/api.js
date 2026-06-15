@@ -39,3 +39,25 @@ export const injectionApi = {
   update: (id, data) => axios.put(`${API_BASE}/injections/${id}`, data),
   delete: (id) => axios.delete(`${API_BASE}/injections/${id}`)
 };
+
+export const scenarioPackageApi = {
+  export: (scenarioId) => axios.post(`${API_BASE}/scenario-packages/export/${scenarioId}`),
+  checkConflicts: (packageData, forceScenarioName) => 
+    axios.post(`${API_BASE}/scenario-packages/check-conflicts`, { 
+      package_data: packageData, 
+      force_scenario_name: forceScenarioName 
+    }),
+  import: (packageData, decisions) => 
+    axios.post(`${API_BASE}/scenario-packages/import`, { 
+      package_data: packageData, 
+      decisions 
+    }),
+  preview: (packageData) => 
+    axios.post(`${API_BASE}/scenario-packages/import/preview`, { 
+      package_data: packageData 
+    }),
+  getImportLogs: () => axios.get(`${API_BASE}/scenario-packages/import-logs`),
+  getLatestImportLog: () => axios.get(`${API_BASE}/scenario-packages/import-logs/latest`),
+  rollback: () => axios.post(`${API_BASE}/scenario-packages/rollback`),
+  getScenariosWithHistory: () => axios.get(`${API_BASE}/scenario-packages/scenarios-with-history`)
+};

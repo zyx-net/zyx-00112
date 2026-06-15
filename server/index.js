@@ -10,6 +10,7 @@ const rollbackRouter = require('./routes/rollback');
 const failureInjectionsRouter = require('./routes/failureInjections');
 const fieldMappingsRouter = require('./routes/fieldMappings');
 const compatibilityStrategiesRouter = require('./routes/compatibilityStrategies');
+const scenarioPackagesRouter = require('./routes/scenarioPackages');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/rollback', rollbackRouter);
 app.use('/api/injections', failureInjectionsRouter);
 app.use('/api/field-mappings', fieldMappingsRouter);
 app.use('/api/compatibility-strategies', compatibilityStrategiesRouter);
+app.use('/api/scenario-packages', scenarioPackagesRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build', 'index.html'));

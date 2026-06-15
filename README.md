@@ -21,6 +21,13 @@
 - 快照、日志、归档状态、配置版本在重启后保持一致
 - 支持导出场景执行摘要
 
+### 场景包能力（v1.2.0 新增）
+1. **完整导出** - 将场景的接口版本、字段映射、兼容策略、失败注入、执行历史摘要和最近一次可回滚快照导出为JSON
+2. **智能导入** - 导入时自动检测冲突，支持覆盖、另存为、跳过等处理方式
+3. **冲突拦截** - 同名场景、同版本号、缺字段、schema不兼容、已有运行记录等冲突都会被拦住
+4. **导入撤销** - 可撤销最近一次导入，恢复导入前的状态
+5. **变更追踪** - 所有导入、导出、冲突决策和撤销动作都记入日志
+
 ## 技术栈
 
 - **后端**: Node.js + Express + SQLite
@@ -107,6 +114,39 @@ npm start
    - 点击「执行回滚」
    - 查看回滚结果，确认回滚成功
 
+### 流程三：场景包导入导出
+
+1. **导出场景包**
+   - 进入「场景包」页面
+   - 从下拉列表选择要导出的场景
+   - 点击「导出场景包」按钮
+   - 浏览器会自动下载JSON文件，包含：
+     - 场景基本信息
+     - 关联的API版本和Schema
+     - 字段映射规则
+     - 兼容策略配置
+     - 失败注入规则
+     - 执行历史摘要
+     - 最近一次快照数据
+
+2. **导入场景包**
+   - 进入「场景包」页面
+   - 点击「选择JSON文件」上传导出的场景包
+   - 系统自动预览导入内容
+   - 如有冲突，弹出冲突处理窗口
+   - 选择处理方式（覆盖/另存为/跳过）
+   - 点击「确认导入」完成导入
+
+3. **处理导入冲突**
+   - **同名场景冲突** - 可选择：覆盖现有场景 / 另存为新场景 / 跳过
+   - **Schema不兼容** - 可选择：跳过API版本 / 强制创建
+   - **已有运行记录** - 可选择：跳过执行历史 / 保留执行历史
+
+4. **撤销导入**
+   - 点击「撤销最近一次导入」按钮
+   - 系统删除最近导入的场景
+   - 导入记录仍然保留在日志中
+
 ## 失败注入类型
 
 | 类型 | 说明 | 配置示例 |
@@ -162,6 +202,19 @@ npm start
 | POST | /api/rollback/:scenarioId | 执行回滚 |
 | GET | /api/rollback/history/:scenarioId | 获取回滚历史 |
 | GET | /api/rollback/export/:scenarioId | 导出场景摘要 |
+
+### 场景包管理
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | /api/scenario-packages/export/:scenarioId | 导出场景包 |
+| POST | /api/scenario-packages/check-conflicts | 检测导入冲突 |
+| POST | /api/scenario-packages/import | 导入场景包 |
+| POST | /api/scenario-packages/import/preview | 预览导入 |
+| GET | /api/scenario-packages/import-logs | 获取导入日志 |
+| GET | /api/scenario-packages/import-logs/latest | 获取最近导入日志 |
+| POST | /api/scenario-packages/rollback | 撤销最近导入 |
+| GET | /api/scenario-packages/scenarios-with-history | 获取带历史的场景列表 |
 
 ## 项目结构
 
@@ -250,6 +303,40 @@ npm start
 2. 停止服务并重启
 3. 确认场景、执行记录、快照数据完整保留
 
+### 测试用例8：场景包导出
+
+1. 创建API版本（带Schema）
+2. 创建场景并关联API版本
+3. 添加字段映射和失败注入
+4. 进入「场景包」页面
+5. 选择该场景并点击导出
+6. 确认下载的JSON文件包含所有配置
+
+### 测试用例9：场景包导入
+
+1. 准备一个场景包JSON文件
+2. 进入「场景包」页面
+3. 上传JSON文件
+4. 确认预览显示所有导入内容
+5. 点击确认导入
+6. 确认新场景创建成功
+
+### 测试用例10：冲突检测
+
+1. 导出某个场景
+2. 重新导入同一场景包
+3. 确认检测到同名冲突
+4. 选择"另存为"处理方式
+5. 确认新场景创建成功（带_imported_后缀）
+
+### 测试用例11：导入撤销
+
+1. 导入一个场景包
+2. 记录新场景ID
+3. 点击"撤销最近导入"
+4. 确认该场景已被删除
+5. 确认导入日志仍保留
+
 ## 修复记录
 
 ### v1.1.0 修复内容
@@ -295,6 +382,32 @@ npm test
 - Test 4: 字段映射和兼容策略完整性
 
 **所有测试通过 (4/4)**
+
+### v1.2.0 场景包能力
+
+#### 新增功能
+1. **完整导出** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 实现导出逻辑，将场景的接口版本、字段映射、兼容策略、失败注入、执行历史摘要和快照一起打包
+2. **冲突检测** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 的 `checkConflicts` 方法检测同名场景、同版本号、缺字段、schema不兼容、已有运行记录等冲突
+3. **智能导入** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 的 `importScenario` 方法支持覆盖、另存为、跳过等处理方式
+4. **导入撤销** - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js) 的 `rollbackLastImport` 方法撤销最近一次导入
+5. **变更追踪** - [scenarioPackageDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/scenarioPackageDao.js) 中的 `importLogDao` 记录所有导入、导出、冲突决策和撤销动作
+
+#### 数据库扩展
+- 新增 `scenario_packages` 表 - 存储导入的包数据和关联关系
+- 新增 `import_logs` 表 - 存储导入日志和决策
+
+#### 前端组件
+- 新增 [ScenarioPackageManager.js](file:///d:/workSpace/AI__SPACE/zyx-00112/client/src/components/ScenarioPackageManager.js) - 场景包管理界面
+
+#### 回归测试
+- Test 5: 场景包导出完整性
+- Test 6: 场景包导入功能
+- Test 7: 冲突检测
+- Test 8: 冲突决策处理
+- Test 9: 导入日志持久化
+- Test 10: 导入撤销
+
+**所有测试通过 (10/10)**
 
 ## License
 

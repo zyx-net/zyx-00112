@@ -4,7 +4,8 @@ const Navigation = ({ activeTab, setActiveTab }) => {
  { id: 'scenarios', label: '场景管理' },
  { id: 'injections', label: '失败注入' },
  { id: 'execution', label: '演练执行' },
- { id: 'rollback', label: '回滚管理' }
+ { id: 'rollback', label: '回滚管理' },
+ { id: 'packages', label: '场景包' }
  ];
  return (<nav style={{ backgroundColor: '#34495e', padding: '0 2rem' }}>
  <ul style={{ display: 'flex', listStyle: 'none', margin: 0, padding: 0 }}>

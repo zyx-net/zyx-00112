@@ -98,6 +98,26 @@ function initDatabase() {
       archived_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (scenario_id) REFERENCES scenarios(id)
     )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS scenario_packages (
+      id TEXT PRIMARY KEY,
+      scenario_id TEXT,
+      package_data TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      archived_scenario_id TEXT,
+      FOREIGN KEY (scenario_id) REFERENCES scenarios(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS import_logs (
+      id TEXT PRIMARY KEY,
+      package_id TEXT NOT NULL,
+      import_time TEXT DEFAULT CURRENT_TIMESTAMP,
+      source_package TEXT NOT NULL,
+      conflict_decisions TEXT,
+      result TEXT NOT NULL,
+      details TEXT
+    )`);
   });
 }
 
