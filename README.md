@@ -250,6 +250,52 @@ npm start
 2. 停止服务并重启
 3. 确认场景、执行记录、快照数据完整保留
 
+## 修复记录
+
+### v1.1.0 修复内容
+
+#### 1. 字段映射和兼容策略补全
+- **问题**: API版本只存储名称、版本、路径和schema，字段映射、兼容策略既没法定义也不会落库
+- **修复**:
+  - 新增 [fieldMappingDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/fieldMappingDao.js) - 字段映射数据访问层
+  - 新增 [compatibilityStrategyDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/compatibilityStrategyDao.js) - 兼容策略数据访问层
+  - 新增 [fieldMappings.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/fieldMappings.js) - 字段映射API路由
+  - 新增 [compatibilityStrategies.js](file:///d:/workSpace/AI__SPACE/zyx/00112/server/routes/compatibilityStrategies.js) - 兼容策略API路由
+  - 更新 [apiVersions.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/apiVersions.js) - 获取版本详情时返回关联的字段映射和兼容策略
+- **验证**: 测试4验证了字段映射和兼容策略可创建、持久化并正确关联到API版本
+
+#### 2. 失败注入校验增强
+- **问题**: 失败注入缺少有效校验，非法配置会被写进去，读取时可能把服务打挂
+- **修复**:
+  - [failureInjectionDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/failureInjectionDao.js) 新增完整的校验逻辑：
+    - 写入前校验注入类型、必填字段、配置格式
+    - 读取时使用 `_safeParseConfig` 方法兜底，脏数据不会导致崩溃
+  - [executionEngine.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/executionEngine.js) 执行时添加兜底处理：
+    - 使用 `safeConfig` 确保 config 始终是有效对象
+    - 未知注入类型不会导致执行失败
+  - [apiVersionDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/apiVersionDao.js) JSON解析添加安全处理
+- **验证**: 测试1验证了非法注入配置（无效类型、缺少必填字段、无效statusCode、无效JSON）被正确拒绝
+
+### 回归测试
+
+运行回归测试验证修复：
+
+```bash
+# 启动服务
+npm start
+
+# 运行测试（需要另开终端）
+npm test
+```
+
+测试覆盖：
+- Test 1: 非法注入配置被拒绝（4个子用例）
+- Test 2: 合法配置可持久化
+- Test 3: 回滚链路可用
+- Test 4: 字段映射和兼容策略完整性
+
+**所有测试通过 (4/4)**
+
 ## License
 
 MIT

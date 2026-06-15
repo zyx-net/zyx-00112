@@ -1,5 +1,7 @@
 const express = require('express');
 const apiVersionDao = require('../dao/apiVersionDao');
+const fieldMappingDao = require('../dao/fieldMappingDao');
+const compatibilityStrategyDao = require('../dao/compatibilityStrategyDao');
 
 const router = express.Router();
 
@@ -18,7 +20,15 @@ router.get('/:id', async (req, res) => {
     if (!version) {
       res.status(404).json({ error: 'API版本不存在' });
     } else {
-      res.json(version);
+      const [fieldMappings, compatibilityStrategies] = await Promise.all([
+        fieldMappingDao.getByApiVersionId(req.params.id),
+        compatibilityStrategyDao.getByApiVersionId(req.params.id)
+      ]);
+      res.json({
+        ...version,
+        field_mappings: fieldMappings,
+        compatibility_strategies: compatibilityStrategies
+      });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });

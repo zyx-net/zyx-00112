@@ -58,24 +58,35 @@ class ExecutionEngine {
       }
 
       for (const injection of enabledInjections) {
-        if (Math.random() < injection.probability) {
-          logs.push(`[${new Date().toISOString()}] 触发失败注入: ${injection.type}`);
-          logs.push(`[${new Date().toISOString()}] 注入配置: ${JSON.stringify(injection.config)}`);
+        try {
+          const safeConfig = (injection.config && typeof injection.config === 'object') ? injection.config : {};
           
-          if (injection.type === 'network_delay') {
-            await this._simulateNetworkDelay(injection.config);
-            logs.push(`[${new Date().toISOString()}] 网络延迟模拟完成`);
-          } else if (injection.type === 'error_response') {
-            const errorCode = injection.config.statusCode || 500;
-            const errorMessage = injection.config.message || '模拟错误';
-            throw new Error(`HTTP ${errorCode}: ${errorMessage}`);
-          } else if (injection.type === 'timeout') {
-            logs.push(`[${new Date().toISOString()}] 触发超时模拟`);
-            await this._simulateTimeout(injection.config);
-          } else if (injection.type === 'data_corruption') {
-            logs.push(`[${new Date().toISOString()}] 触发数据损坏模拟`);
-            throw new Error('数据损坏错误');
+          if (Math.random() < (injection.probability || 0)) {
+            logs.push(`[${new Date().toISOString()}] 触发失败注入: ${injection.type || 'unknown'}`);
+            logs.push(`[${new Date().toISOString()}] 注入配置: ${JSON.stringify(safeConfig)}`);
+            
+            if (injection.type === 'network_delay') {
+              await this._simulateNetworkDelay(safeConfig);
+              logs.push(`[${new Date().toISOString()}] 网络延迟模拟完成`);
+            } else if (injection.type === 'error_response') {
+              const errorCode = safeConfig.statusCode || 500;
+              const errorMessage = safeConfig.message || '模拟错误';
+              throw new Error(`HTTP ${errorCode}: ${errorMessage}`);
+            } else if (injection.type === 'timeout') {
+              logs.push(`[${new Date().toISOString()}] 触发超时模拟`);
+              await this._simulateTimeout(safeConfig);
+            } else if (injection.type === 'data_corruption') {
+              logs.push(`[${new Date().toISOString()}] 触发数据损坏模拟`);
+              throw new Error('数据损坏错误');
+            } else {
+              logs.push(`[${new Date().toISOString()}] 未知注入类型: ${injection.type}，跳过`);
+            }
           }
+        } catch (error) {
+          if (error.message.includes('HTTP ') || error.message.includes('超时') || error.message.includes('数据损坏')) {
+            throw error;
+          }
+          logs.push(`[${new Date().toISOString()}] 处理注入规则时出错: ${error.message}`);
         }
       }
 

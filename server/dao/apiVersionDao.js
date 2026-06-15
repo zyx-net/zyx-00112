@@ -2,13 +2,30 @@ const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
 
 class ApiVersionDao {
+  _safeParseJson(str, defaultValue = {}) {
+    if (!str) return defaultValue;
+    try {
+      const parsed = JSON.parse(str);
+      return typeof parsed === 'object' ? parsed : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+
+  _ensureJsonString(value) {
+    if (!value) return '{}';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') return JSON.stringify(value);
+    return '{}';
+  }
+
   create(versionData) {
     return new Promise((resolve, reject) => {
       const id = uuidv4();
       const { name, version, base_path, schema } = versionData;
       db.run(
         'INSERT INTO api_versions (id, name, version, base_path, schema) VALUES (?, ?, ?, ?, ?)',
-        [id, name, version, base_path, schema || JSON.stringify({})],
+        [id, name, version, base_path, this._ensureJsonString(schema)],
         function(err) {
           if (err) reject(err);
           else resolve({ id, name, version, base_path, schema });
@@ -21,7 +38,7 @@ class ApiVersionDao {
     return new Promise((resolve, reject) => {
       db.all('SELECT * FROM api_versions ORDER BY created_at DESC', (err, rows) => {
         if (err) reject(err);
-        else resolve(rows.map(row => ({ ...row, schema: JSON.parse(row.schema) })));
+        else resolve(rows.map(row => ({ ...row, schema: this._safeParseJson(row.schema) })));
       });
     });
   }
@@ -31,7 +48,7 @@ class ApiVersionDao {
       db.get('SELECT * FROM api_versions WHERE id = ?', [id], (err, row) => {
         if (err) reject(err);
         else if (!row) resolve(null);
-        else resolve({ ...row, schema: JSON.parse(row.schema) });
+        else resolve({ ...row, schema: this._safeParseJson(row.schema) });
       });
     });
   }
@@ -41,7 +58,7 @@ class ApiVersionDao {
       const { name, version, base_path, schema } = versionData;
       db.run(
         'UPDATE api_versions SET name = ?, version = ?, base_path = ?, schema = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [name, version, base_path, schema || JSON.stringify({}), id],
+        [name, version, base_path, this._ensureJsonString(schema), id],
         function(err) {
           if (err) reject(err);
           else resolve({ id, ...versionData });
