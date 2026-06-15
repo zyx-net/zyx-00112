@@ -364,6 +364,67 @@ npm start
 
 ## 修复记录
 
+### v1.2.4 覆盖导入完整备份与归档恢复 (2026-06-16)
+
+#### 修复的问题
+
+1. **覆盖导入时旧场景数据未完整备份**
+   - **问题**: 覆盖导入时只备份了场景基本信息，未备份执行历史、快照、失败注入等关联数据
+   - **修复**:
+     - [scenarioPackageDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/scenarioPackageDao.js#L127-L162) - 新增 `archiveComplete` 方法，支持完整备份场景及所有关联数据
+     - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L234-L241) - 覆盖导入时收集完整的场景、执行、快照、注入数据
+
+2. **撤销覆盖导入后旧场景数据丢失**
+   - **问题**: 用户撤销覆盖导入后，被替换的旧场景无法恢复，只能得到一个新场景
+   - **修复**:
+     - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L564-L626) - 撤销时从归档恢复完整的旧场景数据
+     - [scenarioPackageDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/scenarioPackageDao.js#L164-L178) - 新增 `getLatestByScenarioId` 和 `getAllByScenarioId` 方法支持归档查询
+
+3. **归档恢复时关联数据ID映射问题**
+   - **问题**: 恢复快照时，新的执行ID与原始执行ID不匹配
+   - **修复**: [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L590-L601) - 使用 `executionIdMap` 映射原始执行ID到新执行ID
+
+#### 新增功能
+
+1. **完整归档机制**
+   - 覆盖导入时自动备份场景、执行历史、快照、失败注入等所有关联数据
+   - 归档数据持久化到数据库，重启服务后不丢失
+   - 归档记录包含完整的数据统计信息
+
+2. **智能恢复机制**
+   - 撤销覆盖导入时自动从归档恢复完整的旧场景
+   - 自动重建执行历史、快照与场景的关联关系
+   - 恢复后场景状态、执行数、快照数与原场景完全一致
+
+3. **增强的追溯信息**
+   - 导入日志显示归档场景ID
+   - 撤销日志显示从归档恢复的详细信息（恢复的场景名、执行数、快照数、注入数）
+   - 前端日志界面区分显示覆盖导入、撤销导入、从归档恢复等不同操作
+
+#### 新增测试
+
+- **覆盖导入完整恢复测试**: [scenario-import-complete-replace-test.js](file:///d:/workSpace/AI__SPACE/zyx-00112/test/scenario-import-complete-replace-test.js)
+  - Test: 覆盖导入完整备份和恢复 - 验证覆盖后撤销能恢复完整的旧场景
+  - Test: 重启持久化测试 - 验证覆盖状态和归档数据在重启后保持一致
+
+#### 验证结果
+
+- 覆盖导入完整恢复测试: 2/2 通过
+- 所有测试套件: 14/14 通过
+
+#### 复现步骤
+
+1. 启动服务: `npm start`
+2. 创建包含执行历史的场景
+3. 添加失败注入
+4. 导出场景包
+5. 创建同名场景
+6. 选择同名场景后，在导入界面选择"覆盖现有场景"
+7. 确认导入后，旧场景数据被备份
+8. 查看导入日志，确认显示"完整备份已归档"
+9. 执行撤销操作
+10. 确认旧场景被完全恢复，包括执行历史、快照、失败注入
+
 ### v1.2.3 场景包覆盖分支与追溯信息完善 (2026-06-16)
 
 #### 修复的问题

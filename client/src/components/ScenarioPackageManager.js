@@ -345,7 +345,7 @@ const ScenarioPackageManager = () => {
                   {log.details && (
                     <div style={{ color: '#666' }}>
                       {log.details.scenario_action && (
-                        <div>操作: {log.details.scenario_action === 'replace' ? '覆盖' : log.details.scenario_action === 'save_as' ? '另存' : log.details.scenario_action}</div>
+                        <div>操作: {log.details.scenario_action === 'replace' ? '🔄 覆盖' : log.details.scenario_action === 'save_as' ? '📋 另存' : log.details.scenario_action}</div>
                       )}
                       {log.details.original_scenario_name && (
                         <div>原始场景: {log.details.original_scenario_name}</div>
@@ -357,20 +357,41 @@ const ScenarioPackageManager = () => {
                         <div>恢复快照ID: {log.details.restored_snapshot_id}</div>
                       )}
                       {log.details.replaced_scenario && (
-                        <div style={{ color: '#e74c3c' }}>
-                          替换场景: {log.details.replaced_scenario.scenario_name} 
-                          (执行{log.details.replaced_scenario.execution_count}次, 快照{log.details.replaced_scenario.snapshot_count}个)
+                        <div style={{ color: '#e74c3c', marginTop: '0.25rem', padding: '0.25rem', backgroundColor: '#ffe6e6', borderRadius: '3px' }}>
+                          <strong>⚠️ 被替换场景:</strong> {log.details.replaced_scenario.scenario_name}
+                          <div style={{ fontSize: '0.75rem' }}>
+                            执行{log.details.replaced_scenario.execution_count}次, 
+                            快照{log.details.replaced_scenario.snapshot_count}个, 
+                            注入{log.details.replaced_scenario.injection_count}条
+                          </div>
+                          {log.details.replaced_scenario.full_backup_stored && (
+                            <div style={{ fontSize: '0.7rem', color: '#27ae60' }}>✓ 完整备份已归档</div>
+                          )}
+                        </div>
+                      )}
+                      {log.details.archived_scenario_id && log.details.scenario_action === 'replace' && (
+                        <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                          归档ID: {log.details.archived_scenario_id}
                         </div>
                       )}
                       {log.details.undone_scenario_id && (
-                        <div style={{ color: '#e74c3c' }}>
-                          撤销场景: {log.details.rolled_back_scenario_name}
+                        <div style={{ color: '#e74c3c', marginTop: '0.25rem', padding: '0.25rem', backgroundColor: '#ffe6e6', borderRadius: '3px' }}>
+                          <strong>↩️ 撤销导入:</strong> {log.details.rolled_back_scenario_name}
                           {log.details.cleaned_resources_summary && (
-                            <span>
-                              (执行{log.details.cleaned_resources_summary.total_executions}次, 
-                              快照{log.details.cleaned_resources_summary.total_snapshots}个)
-                            </span>
+                            <div style={{ fontSize: '0.75rem' }}>
+                              清理: 执行{log.details.cleaned_resources_summary.total_executions}次, 
+                              快照{log.details.cleaned_resources_summary.total_snapshots}个
+                            </div>
                           )}
+                        </div>
+                      )}
+                      {log.details.restored_from_archive && (
+                        <div style={{ color: '#27ae60', marginTop: '0.25rem', padding: '0.25rem', backgroundColor: '#e6ffe6', borderRadius: '3px' }}>
+                          <strong>🔄 从归档恢复:</strong> {log.details.restored_scenario_name}
+                          <div style={{ fontSize: '0.75rem' }}>
+                            恢复执行{log.details.restored_execution_count}次, 
+                            快照{log.details.restored_snapshot_count}个
+                          </div>
                         </div>
                       )}
                       {log.conflict_decisions && Object.keys(log.conflict_decisions).length > 0 && (

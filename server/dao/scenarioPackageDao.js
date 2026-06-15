@@ -123,6 +123,43 @@ class ArchivedScenarioDao {
     });
   }
 
+  archiveComplete(scenarioId, archiveData) {
+    return new Promise((resolve, reject) => {
+      const id = uuidv4();
+      const {
+        scenario,
+        executions = [],
+        snapshots = [],
+        failureInjections = [],
+        archived_at = new Date().toISOString(),
+        reason = 'replaced_by_import'
+      } = archiveData;
+
+      db.run(
+        `INSERT INTO archived_scenarios (id, scenario_id, data, archived_at) VALUES (?, ?, ?, ?)`,
+        [id, scenarioId, JSON.stringify({
+          scenario,
+          executions,
+          snapshots,
+          failureInjections,
+          archived_at,
+          reason,
+          metadata: {
+            archived_version: '1.2.0',
+            archived_by: 'scenario-package-service',
+            execution_count: executions.length,
+            snapshot_count: snapshots.length,
+            injection_count: failureInjections.length
+          }
+        }), archived_at],
+        function(err) {
+          if (err) reject(err);
+          else resolve({ id, scenario_id: scenarioId });
+        }
+      );
+    });
+  }
+
   getByScenarioId(scenarioId) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -137,11 +174,56 @@ class ArchivedScenarioDao {
     });
   }
 
+  getLatestByScenarioId(scenarioId) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM archived_scenarios WHERE scenario_id = ? ORDER BY rowid DESC LIMIT 1',
+        [scenarioId],
+        (err, row) => {
+          if (err) reject(err);
+          else if (!row) resolve(null);
+          else {
+            const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+            resolve({ ...row, data });
+          }
+        }
+      );
+    });
+  }
+
+  getAllByScenarioId(scenarioId) {
+    return new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM archived_scenarios WHERE scenario_id = ? ORDER BY archived_at DESC',
+        [scenarioId],
+        (err, rows) => {
+          if (err) reject(err);
+          else {
+            const result = rows.map(row => {
+              const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+              return { ...row, data };
+            });
+            resolve(result);
+          }
+        }
+      );
+    });
+  }
+
   delete(id) {
     return new Promise((resolve, reject) => {
       db.run('DELETE FROM archived_scenarios WHERE id = ?', [id], function(err) {
         if (err) reject(err);
         else resolve({ success: this.changes > 0 });
+      });
+    });
+  }
+
+  deleteByScenarioId(scenarioId) {
+    return new Promise((resolve, reject) => {
+      db.run('DELETE FROM archived_scenarios WHERE scenario_id = ?', [scenarioId], function(err) {
+        if (err) reject(err);
+        else resolve({ success: this.changes > 0, deletedCount: this.changes });
       });
     });
   }

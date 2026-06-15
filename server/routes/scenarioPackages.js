@@ -97,6 +97,7 @@ router.post('/import', async (req, res) => {
       original_execution_count: result.traceability?.execution_count || 0,
       replaced_scenario: result.traceability?.replaced_scenario || null,
       archived_scenario_id: result.traceability?.archived_scenario_id || null,
+      replaced_full_backup: result.traceability?.replaced_scenario?.full_backup_stored || false,
       imported_items_summary: {
         scenarios: result.imported_items.scenarios?.length || 0,
         api_versions: result.imported_items.api_versions?.length || 0,
@@ -119,7 +120,8 @@ router.post('/import', async (req, res) => {
     await scenarioPackageService.savePackageForRollback(
       result.new_scenario_id,
       package_data,
-      result.imported_items
+      result.imported_items,
+      result.traceability?.archived_scenario_id
     );
 
     res.status(201).json({
@@ -183,7 +185,7 @@ router.get('/import-logs/latest', async (req, res) => {
 router.post('/rollback', async (req, res) => {
   try {
     const result = await scenarioPackageService.rollbackLastImport();
-    
+
     const rollbackDetails = {
       rolled_back_scenario_id: result.rolled_back_scenario_id,
       rolled_back_scenario_name: result.rolled_back_scenario_name,
@@ -195,6 +197,12 @@ router.post('/rollback', async (req, res) => {
       undone_field_mapping_ids: result.cleaned_resources?.field_mappings || [],
       undone_compatibility_strategy_ids: result.cleaned_resources?.compatibility_strategies || [],
       undone_api_version_id: result.cleaned_resources?.api_version_id,
+      restored_from_archive: result.restored_from_archive || false,
+      restored_scenario_id: result.restored_scenario_id || null,
+      restored_scenario_name: result.cleaned_resources?.restored_scenario_name || null,
+      restored_execution_count: result.cleaned_resources?.restored_execution_count || 0,
+      restored_snapshot_count: result.cleaned_resources?.restored_snapshot_count || 0,
+      restored_injection_count: result.cleaned_resources?.restored_injection_count || 0,
       cleaned_resources_summary: {
         total_executions: (result.cleaned_resources?.executions || []).length,
         total_snapshots: (result.cleaned_resources?.snapshots || []).length,
@@ -204,7 +212,7 @@ router.post('/rollback', async (req, res) => {
         api_version_cleaned: !!result.cleaned_resources?.api_version_id
       }
     };
-    
+
     await scenarioPackageService.recordImport(
       'rollback',
       'system',
@@ -221,6 +229,9 @@ router.post('/rollback', async (req, res) => {
         undone_snapshot_ids: result.cleaned_resources?.snapshots || [],
         undone_scenario_id: result.rolled_back_scenario_id,
         undone_scenario_name: result.rolled_back_scenario_name,
+        restored_from_archive: result.restored_from_archive || false,
+        restored_scenario_id: result.restored_scenario_id || null,
+        restored_scenario_name: result.cleaned_resources?.restored_scenario_name || null,
         rollback_details: rollbackDetails
       }
     });
