@@ -337,7 +337,85 @@ npm start
 4. 确认该场景已被删除
 5. 确认导入日志仍保留
 
+### 测试用例12：同名场景覆盖导入
+
+1. 创建API版本和场景A
+2. 为场景A添加失败注入并执行
+3. 创建另一个场景B（不同名）
+4. 导出场景B
+5. 修改场景B的JSON包名为场景A的名字
+6. 导入场景包，选择"覆盖现有场景"
+7. 确认同名场景A被替换
+8. 确认替换场景的所有关联数据（执行历史、快照、失败注入）被清除
+9. 查看导入日志，确认追溯信息包含替换场景的详情
+
+### 测试用例13：导入追溯信息验证
+
+1. 创建API版本和场景
+2. 执行场景生成执行历史
+3. 导出场景包
+4. 导入场景包（save_as分支）
+5. 再次导入场景包（replace分支）
+6. 查看导入日志
+7. 确认save_as日志包含：新场景ID、_imported_后缀、无替换场景信息
+8. 确认replace日志包含：新场景ID（同名）、替换场景详情（包含被替换场景的执行和快照数量）
+9. 执行撤销操作
+10. 确认撤销日志包含：被撤销的场景ID、清理的资源统计（执行数、快照数等）
+
 ## 修复记录
+
+### v1.2.3 场景包覆盖分支与追溯信息完善 (2026-06-16)
+
+#### 修复的问题
+
+1. **前后端参数不一致导致覆盖分支 409 错误**
+   - **问题**: 前端使用 `overwrite` 作为覆盖选项值，后端期望 `replace`，导致用户选择覆盖后仍收到 409 冲突错误
+   - **修复**: 
+     - [ScenarioPackageManager.js](file:///d:/workSpace/AI__SPACE/zyx-00112/client/src/components/ScenarioPackageManager.js#L166) - 将 `overwrite` 改为 `replace`
+     - [ScenarioPackageManager.js](file:///d:/workSpace/AI__SPACE/zyx-00112/client/src/components/ScenarioPackageManager.js#L111-L115) - 转换决策参数，将 `duplicate_name` 转为 `scenario_action`
+
+2. **覆盖分支追溯信息不完整**
+   - **问题**: 覆盖导入时未记录被替换场景的详细信息
+   - **修复**: 
+     - [scenarioPackageService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/scenarioPackageService.js#L198-L259) - 覆盖导入时记录被替换场景的执行数、快照数、注入数等
+     - [scenarioPackageService.js](file:///d:/workSpace/AI__00112/server/services/scenarioPackageService.js#L413-L427) - traceability 返回值包含完整替换信息
+     - [scenarioPackages.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/scenarioPackages.js#L83-L107) - 导入日志记录完整追溯信息
+
+3. **撤销功能追溯信息不完整**
+   - **问题**: 撤销导入时未记录清理资源的详细统计
+   - **修复**: 
+     - [scenarioPackages.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/scenarioPackages.js#L186-L207) - 撤销日志包含清理资源汇总
+
+#### 新增功能
+
+1. **前端冲突模态框增强**
+   - 显示被替换场景的详细信息（ID、状态）
+   - 警告用户选择覆盖将删除关联数据
+
+2. **导入日志追溯信息增强**
+   - 显示操作类型（覆盖/另存）
+   - 显示原始场景名称
+   - 显示恢复的执行ID和快照ID
+   - 显示替换场景详情
+   - 显示撤销操作的资源清理统计
+
+#### 新增测试
+
+- **覆盖分支完整测试**: [scenario-import-replace-branch.js](file:///d:/workSpace/AI__SPACE/zyx-00112/test/scenario-import-replace-branch.js)
+  - Test: 覆盖分支完整测试 - 验证替换操作正确清除旧数据并记录归档
+  - Test: 前端冲突决策流程 - 验证 save_as 和 replace 两个分支的完整链路
+
+- **追溯信息测试**: [scenario-import-traceability.js](file:///d:/workSpace/AI__SPACE/zyx-00112/test/scenario-import-traceability.js)
+  - Test: 导出 → 导入 → 撤销链路 - 验证完整追溯信息
+  - Test: 多执行恢复 - 验证最新成功执行关联的快照
+  - Test: 导入日志追溯 - 验证日志包含完整追溯信息
+  - Test: 重启持久化 - 验证数据在重启后保持一致
+
+#### 验证结果
+
+- 场景包追溯测试: 4/4 通过
+- 覆盖分支测试: 2/2 通过
+- 场景包回归测试: 4/4 通过
 
 ### v1.2.2 场景包导入闭环修复 (2026-06-16)
 

@@ -82,14 +82,30 @@ router.post('/import', async (req, res) => {
     const result = await scenarioPackageService.importScenario(package_data, importDecisions);
     
     const logDetails = {
-      ...result,
+      new_scenario_id: result.new_scenario_id,
+      new_scenario_name: result.new_scenario_name,
+      restored_status: result.restored_status,
+      scenario_action: importDecisions.scenario_action,
+      execution_history_action: importDecisions.execution_history_action,
       traceability: result.traceability,
       restored_execution_id: result.traceability?.restored_execution_id || null,
       restored_snapshot_id: result.traceability?.restored_snapshot_id || null,
+      original_scenario_id: result.traceability?.original_scenario_id || null,
+      original_scenario_name: result.traceability?.original_scenario_name || null,
       original_latest_execution_id: result.traceability?.original_latest_execution_id || null,
-      execution_count: result.traceability?.execution_count || 0,
-      scenario_action: importDecisions.scenario_action,
-      execution_history_action: importDecisions.execution_history_action
+      restored_execution_count: result.traceability?.restored_execution_count || 0,
+      original_execution_count: result.traceability?.execution_count || 0,
+      replaced_scenario: result.traceability?.replaced_scenario || null,
+      archived_scenario_id: result.traceability?.archived_scenario_id || null,
+      imported_items_summary: {
+        scenarios: result.imported_items.scenarios?.length || 0,
+        api_versions: result.imported_items.api_versions?.length || 0,
+        field_mappings: result.imported_items.field_mappings?.length || 0,
+        compatibility_strategies: result.imported_items.compatibility_strategies?.length || 0,
+        failure_injections: result.imported_items.failure_injections?.length || 0,
+        snapshots: result.imported_items.snapshots?.length || 0,
+        executions: result.imported_items.executions?.length || 0
+      }
     };
     
     const log = await scenarioPackageService.recordImport(
@@ -169,11 +185,24 @@ router.post('/rollback', async (req, res) => {
     const result = await scenarioPackageService.rollbackLastImport();
     
     const rollbackDetails = {
-      ...result,
+      rolled_back_scenario_id: result.rolled_back_scenario_id,
+      rolled_back_scenario_name: result.rolled_back_scenario_name,
+      had_package_record: result.had_package_record,
+      had_scenario: result.had_scenario,
       undone_execution_ids: result.cleaned_resources?.executions || [],
       undone_snapshot_ids: result.cleaned_resources?.snapshots || [],
-      undone_scenario_id: result.rolled_back_scenario_id,
-      undone_scenario_name: result.rolled_back_scenario_name
+      undone_failure_injection_ids: result.cleaned_resources?.failure_injections || [],
+      undone_field_mapping_ids: result.cleaned_resources?.field_mappings || [],
+      undone_compatibility_strategy_ids: result.cleaned_resources?.compatibility_strategies || [],
+      undone_api_version_id: result.cleaned_resources?.api_version_id,
+      cleaned_resources_summary: {
+        total_executions: (result.cleaned_resources?.executions || []).length,
+        total_snapshots: (result.cleaned_resources?.snapshots || []).length,
+        total_failure_injections: (result.cleaned_resources?.failure_injections || []).length,
+        total_field_mappings: (result.cleaned_resources?.field_mappings || []).length,
+        total_compatibility_strategies: (result.cleaned_resources?.compatibility_strategies || []).length,
+        api_version_cleaned: !!result.cleaned_resources?.api_version_id
+      }
     };
     
     await scenarioPackageService.recordImport(
@@ -191,7 +220,8 @@ router.post('/rollback', async (req, res) => {
         undone_execution_ids: result.cleaned_resources?.executions || [],
         undone_snapshot_ids: result.cleaned_resources?.snapshots || [],
         undone_scenario_id: result.rolled_back_scenario_id,
-        undone_scenario_name: result.rolled_back_scenario_name
+        undone_scenario_name: result.rolled_back_scenario_name,
+        rollback_details: rollbackDetails
       }
     });
   } catch (error) {

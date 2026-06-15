@@ -107,9 +107,15 @@ const ScenarioPackageManager = () => {
       return;
     }
 
+    const importDecisions = { ...decisions };
+    if (importDecisions.duplicate_name) {
+      importDecisions.scenario_action = importDecisions.duplicate_name;
+      delete importDecisions.duplicate_name;
+    }
+
     setLoading(true);
     try {
-      const res = await scenarioPackageApi.import(importFile, decisions);
+      const res = await scenarioPackageApi.import(importFile, importDecisions);
       showMessage('导入成功！场景 "' + res.data.result.new_scenario_name + '" 已创建');
       setImportFile(null);
       setImportPreview(null);
@@ -163,7 +169,7 @@ const ScenarioPackageManager = () => {
       case 'duplicate_name':
         return [
           { value: 'save_as', label: '另存为新场景' },
-          { value: 'overwrite', label: '覆盖现有场景' },
+          { value: 'replace', label: '覆盖现有场景' },
           { value: 'skip', label: '跳过此场景' }
         ];
       case 'schema_incompatible':
@@ -319,7 +325,7 @@ const ScenarioPackageManager = () => {
               <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid #ddd' }}>时间</th>
               <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid #ddd' }}>来源</th>
               <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid #ddd' }}>结果</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid #ddd' }}>详情</th>
+              <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid #ddd' }}>追溯信息</th>
             </tr>
           </thead>
           <tbody>
@@ -335,11 +341,44 @@ const ScenarioPackageManager = () => {
                     {log.result === 'success' ? '成功' : '失败'}
                   </span>
                 </td>
-                <td style={{ padding: '0.75rem' }}>
-                  {log.conflict_decisions && Object.keys(log.conflict_decisions).length > 0 && (
-                    <span style={{ fontSize: '0.875rem', color: '#666' }}>
-                      决策: {Object.entries(log.conflict_decisions).map(([k, v]) => `${k}=${v}`).join(', ')}
-                    </span>
+                <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                  {log.details && (
+                    <div style={{ color: '#666' }}>
+                      {log.details.scenario_action && (
+                        <div>操作: {log.details.scenario_action === 'replace' ? '覆盖' : log.details.scenario_action === 'save_as' ? '另存' : log.details.scenario_action}</div>
+                      )}
+                      {log.details.original_scenario_name && (
+                        <div>原始场景: {log.details.original_scenario_name}</div>
+                      )}
+                      {log.details.restored_execution_id && (
+                        <div>恢复执行ID: {log.details.restored_execution_id}</div>
+                      )}
+                      {log.details.restored_snapshot_id && (
+                        <div>恢复快照ID: {log.details.restored_snapshot_id}</div>
+                      )}
+                      {log.details.replaced_scenario && (
+                        <div style={{ color: '#e74c3c' }}>
+                          替换场景: {log.details.replaced_scenario.scenario_name} 
+                          (执行{log.details.replaced_scenario.execution_count}次, 快照{log.details.replaced_scenario.snapshot_count}个)
+                        </div>
+                      )}
+                      {log.details.undone_scenario_id && (
+                        <div style={{ color: '#e74c3c' }}>
+                          撤销场景: {log.details.rolled_back_scenario_name}
+                          {log.details.cleaned_resources_summary && (
+                            <span>
+                              (执行{log.details.cleaned_resources_summary.total_executions}次, 
+                              快照{log.details.cleaned_resources_summary.total_snapshots}个)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {log.conflict_decisions && Object.keys(log.conflict_decisions).length > 0 && (
+                        <div style={{ fontSize: '0.75rem', color: '#999', marginTop: '0.25rem' }}>
+                          决策: {Object.entries(log.conflict_decisions).map(([k, v]) => `${k}=${v}`).join(', ')}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -382,6 +421,22 @@ const ScenarioPackageManager = () => {
                     {Object.entries(conflict.details).map(([k, v]) => (
                       <div key={k}>{k}: {typeof v === 'object' ? JSON.stringify(v) : v}</div>
                     ))}
+                  </div>
+                )}
+                
+                {conflict.type === 'duplicate_name' && conflict.existing_scenario && (
+                  <div style={{ fontSize: '0.875rem', color: '#856404', marginBottom: '0.5rem', padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                    <strong>将被替换的现有场景信息:</strong>
+                    <div>ID: {conflict.existing_scenario.id}</div>
+                    <div>状态: {conflict.existing_scenario.status}</div>
+                    <div style={{ color: '#e74c3c' }}>⚠️ 选择"覆盖"将删除此场景及其所有关联数据</div>
+                  </div>
+                )}
+
+                {conflict.type === 'has_execution_history' && conflict.details && (
+                  <div style={{ fontSize: '0.875rem', color: '#856404', marginBottom: '0.5rem', padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                    <div>执行次数: {conflict.details.execution_count}</div>
+                    <div>成功次数: {conflict.details.completed_count}</div>
                   </div>
                 )}
 

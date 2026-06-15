@@ -197,14 +197,20 @@ class ScenarioPackageService {
         restored_execution_id: null,
         restored_snapshot_id: null,
         original_scenario_id: packageData.original_scenario_id || null,
-        original_latest_execution_id: packageData.latest_successful_execution_id || null
-      }
+        original_latest_execution_id: packageData.latest_successful_execution_id || null,
+        original_execution_ids: [],
+        original_snapshot_ids: []
+      },
+      replaced: null
     };
 
     let newScenarioName = packageData.scenario?.name;
     let originalScenarioStatus = packageData.scenario?.status;
     let hasCompletedExecution = false;
     let scenarioAction = decisions.scenario_action || 'save_as';
+    let replacedScenarioId = null;
+    let replacedScenarioArchivedId = null;
+    let replacedScenarioData = null;
     
     if (conflict_issues.some(i => i.type === 'duplicate_name')) {
       if (scenarioAction === 'save_as') {
@@ -213,31 +219,43 @@ class ScenarioPackageService {
         const existingScenario = await scenarioDao.getAll();
         const toOverwrite = existingScenario.find(s => s.name === packageData.scenario?.name);
         if (toOverwrite) {
-          const archived = await archivedScenarioDao.archive(toOverwrite.id, toOverwrite);
+          replacedScenarioId = toOverwrite.id;
+          replacedScenarioData = { ...toOverwrite };
           
           const existingExecutions = await executionDao.getByScenarioId(toOverwrite.id);
+          importedItems.meta.original_execution_ids = existingExecutions.map(e => e.id);
           for (const exec of existingExecutions) {
             await executionDao.delete(exec.id);
           }
           
           const existingSnapshots = await snapshotDao.getByScenarioId(toOverwrite.id);
+          importedItems.meta.original_snapshot_ids = existingSnapshots.map(s => s.id);
           for (const snap of existingSnapshots) {
             await snapshotDao.delete(snap.id);
           }
           
           const existingInjections = await failureInjectionDao.getByScenarioId(toOverwrite.id);
+          importedItems.replaced = {
+            scenario_id: toOverwrite.id,
+            scenario_name: toOverwrite.name,
+            execution_count: existingExecutions.length,
+            snapshot_count: existingSnapshots.length,
+            injection_count: existingInjections.length,
+            archived_at: new Date().toISOString()
+          };
+          
           for (const inj of existingInjections) {
             await failureInjectionDao.delete(inj.id);
           }
           
-          await scenarioDao.delete(toOverwrite.id);
-          importedItems.skipped = importedItems.skipped || [];
-          importedItems.skipped.push({
-            type: 'scenario_replaced',
-            original_id: toOverwrite.id,
-            archived_id: archived.id,
-            archived_at: new Date().toISOString()
+          const archived = await archivedScenarioDao.archive(toOverwrite.id, {
+            ...toOverwrite,
+            archived_at: new Date().toISOString(),
+            reason: 'replaced_by_import'
           });
+          replacedScenarioArchivedId = archived.id;
+          
+          await scenarioDao.delete(toOverwrite.id);
         }
       }
     }
@@ -392,11 +410,17 @@ class ScenarioPackageService {
       new_scenario_name: newScenarioName,
       restored_status: finalScenarioStatus,
       traceability: {
+        action: scenarioAction,
         original_scenario_id: packageData.original_scenario_id || null,
+        original_scenario_name: packageData.scenario?.name || null,
         original_latest_execution_id: packageData.latest_successful_execution_id || null,
         restored_execution_id: importedItems.meta.restored_execution_id || null,
         restored_snapshot_id: importedItems.meta.restored_snapshot_id || null,
-        execution_count: packageData.execution_history_summary?.length || 0
+        restored_execution_count: importedItems.executions.length || 0,
+        execution_count: packageData.execution_history_summary?.length || 0,
+        replaced_scenario: importedItems.replaced,
+        archived_scenario_id: replacedScenarioArchivedId,
+        metadata: packageData.metadata || {}
       }
     };
   }
