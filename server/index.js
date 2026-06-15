@@ -11,6 +11,7 @@ const failureInjectionsRouter = require('./routes/failureInjections');
 const fieldMappingsRouter = require('./routes/fieldMappings');
 const compatibilityStrategiesRouter = require('./routes/compatibilityStrategies');
 const scenarioPackagesRouter = require('./routes/scenarioPackages');
+const auditCenterRouter = require('./routes/auditCenter');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api/injections', failureInjectionsRouter);
 app.use('/api/field-mappings', fieldMappingsRouter);
 app.use('/api/compatibility-strategies', compatibilityStrategiesRouter);
 app.use('/api/scenario-packages', scenarioPackagesRouter);
+app.use('/api/audit-center', auditCenterRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build', 'index.html'));

@@ -6,6 +6,12 @@ const failureInjectionDao = require('../dao/failureInjectionDao');
 const executionDao = require('../dao/executionDao');
 const snapshotDao = require('../dao/snapshotDao');
 const { scenarioPackageDao, importLogDao, archivedScenarioDao } = require('../dao/scenarioPackageDao');
+const {
+  importAuditBatchDao,
+  snapshotVersionChainDao,
+  replacedSnapshotDetailsDao,
+  rollbackResourceChangesDao
+} = require('../dao/auditCenterDao');
 const { v4: uuidv4 } = require('uuid');
 
 class ScenarioPackageService {
@@ -481,6 +487,16 @@ class ScenarioPackageService {
     const latestPackageId = latestPackage.id;
     const archivedScenarioId = latestPackage.archived_scenario_id;
 
+    const rollbackBatch = await importAuditBatchDao.create({
+      operator: 'system',
+      import_type: 'rollback',
+      metadata: {
+        original_package_id: latestPackageId,
+        original_scenario_name: originalScenarioName,
+        rollback_reason: 'user_requested'
+      }
+    });
+
     let scenarioId = latestPackage.scenario_id;
     let cleanedResources = {
       scenario_id: null,
@@ -493,6 +509,8 @@ class ScenarioPackageService {
       archived_scenario_id: archivedScenarioId
     };
 
+    const rollbackChanges = [];
+
     let restoredFromArchive = false;
     let restoredArchiveId = null;
 
@@ -500,9 +518,33 @@ class ScenarioPackageService {
       const importedScenario = await scenarioDao.getById(scenarioId);
 
       if (importedScenario) {
+        rollbackChanges.push({
+          batch_id: rollbackBatch.id,
+          rollback_type: 'import_rollback',
+          import_log_id: latestPackageId,
+          action: 'removed',
+          resource_type: 'scenario',
+          resource_id: scenarioId,
+          resource_name: importedScenario.name,
+          previous_state: { ...importedScenario },
+          new_state: null
+        });
+
         if (importedItems.failure_injections) {
           for (const injection of importedItems.failure_injections) {
             try {
+              const injData = await failureInjectionDao.getById(injection.id);
+              rollbackChanges.push({
+                batch_id: rollbackBatch.id,
+                rollback_type: 'import_rollback',
+                import_log_id: latestPackageId,
+                action: 'removed',
+                resource_type: 'failure_injection',
+                resource_id: injection.id,
+                resource_name: `Injection: ${injData?.type || 'unknown'}`,
+                previous_state: { ...injData },
+                new_state: null
+              });
               await failureInjectionDao.delete(injection.id);
               cleanedResources.failure_injections.push(injection.id);
             } catch (e) {}
@@ -512,6 +554,19 @@ class ScenarioPackageService {
         if (importedItems.snapshots) {
           for (const snapshot of importedItems.snapshots) {
             try {
+              const snapData = await snapshotDao.getById(snapshot.id);
+              rollbackChanges.push({
+                batch_id: rollbackBatch.id,
+                rollback_type: 'import_rollback',
+                import_log_id: latestPackageId,
+                action: 'removed',
+                resource_type: 'snapshot',
+                resource_id: snapshot.id,
+                resource_name: `Snapshot for execution ${snapshot.execution_id || 'N/A'}`,
+                previous_state: { ...snapData },
+                new_state: null,
+                restored_associations: snapshot.execution_id ? { execution_id: snapshot.execution_id } : {}
+              });
               await snapshotDao.delete(snapshot.id);
               cleanedResources.snapshots.push(snapshot.id);
             } catch (e) {}
@@ -521,6 +576,18 @@ class ScenarioPackageService {
         if (importedItems.executions) {
           for (const execution of importedItems.executions) {
             try {
+              const execData = await executionDao.getById(execution.id);
+              rollbackChanges.push({
+                batch_id: rollbackBatch.id,
+                rollback_type: 'import_rollback',
+                import_log_id: latestPackageId,
+                action: 'removed',
+                resource_type: 'execution',
+                resource_id: execution.id,
+                resource_name: `Execution: ${execution.status}`,
+                previous_state: { ...execData },
+                new_state: null
+              });
               await executionDao.delete(execution.id);
               cleanedResources.executions.push(execution.id);
             } catch (e) {}
@@ -541,6 +608,18 @@ class ScenarioPackageService {
             const fieldMappings = importedItems.field_mappings || [];
             for (const mapping of fieldMappings) {
               try {
+                const mapData = await fieldMappingDao.getById(mapping.id);
+                rollbackChanges.push({
+                  batch_id: rollbackBatch.id,
+                  rollback_type: 'import_rollback',
+                  import_log_id: latestPackageId,
+                  action: 'removed',
+                  resource_type: 'field_mapping',
+                  resource_id: mapping.id,
+                  resource_name: `${mapData?.source_field} -> ${mapData?.target_field}`,
+                  previous_state: { ...mapData },
+                  new_state: null
+                });
                 await fieldMappingDao.delete(mapping.id);
                 cleanedResources.field_mappings.push(mapping.id);
               } catch (e) {}
@@ -549,11 +628,35 @@ class ScenarioPackageService {
             const strategies = importedItems.compatibility_strategies || [];
             for (const strategy of strategies) {
               try {
+                const stratData = await compatibilityStrategyDao.getById(strategy.id);
+                rollbackChanges.push({
+                  batch_id: rollbackBatch.id,
+                  rollback_type: 'import_rollback',
+                  import_log_id: latestPackageId,
+                  action: 'removed',
+                  resource_type: 'compatibility_strategy',
+                  resource_id: strategy.id,
+                  resource_name: `${stratData?.strategy_type || 'unknown'}`,
+                  previous_state: { ...stratData },
+                  new_state: null
+                });
                 await compatibilityStrategyDao.delete(strategy.id);
                 cleanedResources.compatibility_strategies.push(strategy.id);
               } catch (e) {}
             }
 
+            const apiVerData = await apiVersionDao.getById(apiVersion.id);
+            rollbackChanges.push({
+              batch_id: rollbackBatch.id,
+              rollback_type: 'import_rollback',
+              import_log_id: latestPackageId,
+              action: 'removed',
+              resource_type: 'api_version',
+              resource_id: apiVersion.id,
+              resource_name: `${apiVerData?.name || 'unknown'} ${apiVerData?.version || ''}`,
+              previous_state: { ...apiVerData },
+              new_state: null
+            });
             await apiVersionDao.delete(apiVersion.id);
             cleanedResources.api_version_id = apiVersion.id;
           } catch (e) {}
@@ -573,16 +676,42 @@ class ScenarioPackageService {
               api_version_id: backup.scenario.api_version_id,
               status: backup.scenario.status
             });
+
+            rollbackChanges.push({
+              batch_id: rollbackBatch.id,
+              rollback_type: 'import_rollback',
+              import_log_id: latestPackageId,
+              action: 'restored',
+              resource_type: 'scenario',
+              resource_id: restoredScenario.id,
+              resource_name: backup.scenario.name,
+              previous_state: null,
+              new_state: { ...restoredScenario }
+            });
+
             restoredArchiveId = restoredScenario.id;
 
+            const restoredInjectionIds = [];
             for (const injection of backup.failureInjections || []) {
               try {
-                await failureInjectionDao.create({
+                const newInj = await failureInjectionDao.create({
                   scenario_id: restoredScenario.id,
                   type: injection.type,
                   probability: injection.probability,
                   config: injection.config,
                   enabled: injection.enabled
+                });
+                restoredInjectionIds.push(newInj.id);
+                rollbackChanges.push({
+                  batch_id: rollbackBatch.id,
+                  rollback_type: 'import_rollback',
+                  import_log_id: latestPackageId,
+                  action: 'restored',
+                  resource_type: 'failure_injection',
+                  resource_id: newInj.id,
+                  resource_name: `Injection: ${injection.type}`,
+                  previous_state: null,
+                  new_state: { id: newInj.id, type: injection.type, probability: injection.probability }
                 });
               } catch (e) {}
             }
@@ -598,13 +727,38 @@ class ScenarioPackageService {
                   logs: exec.logs
                 });
                 executionIdMap[exec.id] = newExec.id;
+                rollbackChanges.push({
+                  batch_id: rollbackBatch.id,
+                  rollback_type: 'import_rollback',
+                  import_log_id: latestPackageId,
+                  action: 'restored',
+                  resource_type: 'execution',
+                  resource_id: newExec.id,
+                  resource_name: `Execution: ${exec.status}`,
+                  previous_state: null,
+                  new_state: { id: newExec.id, status: exec.status, start_time: exec.start_time }
+                });
               } catch (e) {}
             }
 
+            const restoredSnapshotIds = [];
             for (const snap of backup.snapshots || []) {
               try {
                 const mappedExecutionId = executionIdMap[snap.execution_id] || null;
-                await snapshotDao.create(restoredScenario.id, mappedExecutionId, snap.data);
+                const newSnap = await snapshotDao.create(restoredScenario.id, mappedExecutionId, snap.data);
+                restoredSnapshotIds.push(newSnap.id);
+                rollbackChanges.push({
+                  batch_id: rollbackBatch.id,
+                  rollback_type: 'import_rollback',
+                  import_log_id: latestPackageId,
+                  action: 'restored',
+                  resource_type: 'snapshot',
+                  resource_id: newSnap.id,
+                  resource_name: `Snapshot for execution ${mappedExecutionId || 'N/A'}`,
+                  previous_state: null,
+                  new_state: { id: newSnap.id, execution_id: mappedExecutionId },
+                  restored_associations: snap.execution_id ? { original_execution_id: snap.execution_id, new_execution_id: mappedExecutionId } : {}
+                });
               } catch (e) {}
             }
 
@@ -615,6 +769,25 @@ class ScenarioPackageService {
             cleanedResources.restored_execution_count = backup.executions?.length || 0;
             cleanedResources.restored_snapshot_count = backup.snapshots?.length || 0;
             cleanedResources.restored_injection_count = backup.failureInjections?.length || 0;
+
+            rollbackChanges.push({
+              batch_id: rollbackBatch.id,
+              rollback_type: 'import_rollback',
+              import_log_id: latestPackageId,
+              action: 'restored_associations',
+              resource_type: 'scenario_associations',
+              resource_id: restoredScenario.id,
+              resource_name: `Associations for ${backup.scenario.name}`,
+              previous_state: null,
+              new_state: {
+                executions_count: backup.executions?.length || 0,
+                snapshots_count: backup.snapshots?.length || 0,
+                injections_count: backup.failureInjections?.length || 0,
+                restored_execution_ids: Object.values(executionIdMap),
+                restored_snapshot_ids: restoredSnapshotIds,
+                restored_injection_ids: restoredInjectionIds
+              }
+            });
           } catch (e) {
             console.error('Failed to restore from archive:', e);
           }
@@ -623,6 +796,20 @@ class ScenarioPackageService {
 
       await archivedScenarioDao.deleteByScenarioId(importedItems.replaced.scenario_id);
     }
+
+    for (const change of rollbackChanges) {
+      try {
+        await rollbackResourceChangesDao.create(change);
+      } catch (e) {
+        console.error('Failed to record rollback change:', e);
+      }
+    }
+
+    await importAuditBatchDao.update(rollbackBatch.id, {
+      successful_imports: 1,
+      status: 'completed',
+      completed_at: new Date().toISOString()
+    });
 
     await scenarioPackageDao.delete(latestPackageId);
 
@@ -634,7 +821,9 @@ class ScenarioPackageService {
       had_scenario: !!scenarioId,
       restored_from_archive: restoredFromArchive,
       restored_scenario_id: restoredArchiveId,
-      cleaned_resources: cleanedResources
+      cleaned_resources: cleanedResources,
+      audit_batch_id: rollbackBatch.id,
+      rollback_changes_count: rollbackChanges.length
     };
   }
 

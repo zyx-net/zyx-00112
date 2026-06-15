@@ -224,6 +224,8 @@ router.post('/rollback', async (req, res) => {
     res.json({
       success: true,
       result: result,
+      audit_batch_id: result.audit_batch_id,
+      rollback_changes_count: result.rollback_changes_count,
       traceability: {
         undone_execution_ids: result.cleaned_resources?.executions || [],
         undone_snapshot_ids: result.cleaned_resources?.snapshots || [],
@@ -232,7 +234,9 @@ router.post('/rollback', async (req, res) => {
         restored_from_archive: result.restored_from_archive || false,
         restored_scenario_id: result.restored_scenario_id || null,
         restored_scenario_name: result.cleaned_resources?.restored_scenario_name || null,
-        rollback_details: rollbackDetails
+        rollback_details: rollbackDetails,
+        audit_batch_id: result.audit_batch_id,
+        rollback_changes_count: result.rollback_changes_count
       }
     });
   } catch (error) {

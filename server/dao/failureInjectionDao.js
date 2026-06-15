@@ -216,6 +216,36 @@ class FailureInjectionDao {
       });
     });
   }
+
+  getById(id) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT * FROM failure_injections WHERE id = ?', [id], (err, row) => {
+        if (err) reject(err);
+        else if (!row) resolve(null);
+        else {
+          try {
+            resolve({
+              id: row.id,
+              scenario_id: row.scenario_id,
+              type: row.type,
+              probability: row.probability,
+              config: this._safeParseConfig(row.config),
+              enabled: row.enabled === 1
+            });
+          } catch (e) {
+            resolve({
+              id: row.id,
+              scenario_id: row.scenario_id,
+              type: row.type || 'unknown',
+              probability: 0,
+              config: {},
+              enabled: false
+            });
+          }
+        }
+      });
+    });
+  }
 }
 
 module.exports = new FailureInjectionDao();

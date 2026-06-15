@@ -61,3 +61,31 @@ export const scenarioPackageApi = {
   rollback: () => axios.post(`${API_BASE}/scenario-packages/rollback`),
   getScenariosWithHistory: () => axios.get(`${API_BASE}/scenario-packages/scenarios-with-history`)
 };
+
+export const auditCenterApi = {
+  getBatches: (limit = 100, offset = 0) => 
+    axios.get(`${API_BASE}/audit-center/batches`, { params: { limit, offset } }),
+  getBatchById: (batchId) => axios.get(`${API_BASE}/audit-center/batches/${batchId}`),
+  getBatchReport: (batchId) => axios.get(`${API_BASE}/audit-center/batches/${batchId}/report`),
+  getSnapshotVersions: (scenarioId) => 
+    axios.get(`${API_BASE}/audit-center/snapshot-versions/${scenarioId}`),
+  getReplacedSnapshots: (batchId) => 
+    axios.get(`${API_BASE}/audit-center/replaced-snapshots/${batchId}`),
+  getRollbackChanges: (batchId) => 
+    axios.get(`${API_BASE}/audit-center/rollback-changes/${batchId}`),
+  getRestartReviews: (batchId) => 
+    axios.get(`${API_BASE}/audit-center/restart-reviews/${batchId}`),
+  performSimulation: (batchId, scenarioId) => 
+    axios.post(`${API_BASE}/audit-center/restart-reviews/${batchId}/simulation/${scenarioId}`),
+  performRealRestart: (batchId, scenarioId, operator) => 
+    axios.post(`${API_BASE}/audit-center/restart-reviews/${batchId}/real-restart/${scenarioId}`, { operator }),
+  createBatch: (operator, scenarioAction, executionHistoryAction, metadata) =>
+    axios.post(`${API_BASE}/audit-center/batches`, {
+      operator,
+      scenario_action: scenarioAction,
+      execution_history_action: executionHistoryAction,
+      metadata
+    }),
+  completeBatch: (batchId, success = true) =>
+    axios.post(`${API_BASE}/audit-center/complete-batch/${batchId}`, { success })
+};

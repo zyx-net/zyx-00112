@@ -71,6 +71,16 @@ class CompatibilityStrategyDao {
     });
   }
 
+  getById(id) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT * FROM compatibility_strategies WHERE id = ?', [id], (err, row) => {
+        if (err) reject(err);
+        else if (!row) resolve(null);
+        else resolve({ ...row, config: this._safeParseConfig(row.config) });
+      });
+    });
+  }
+
   _safeParseConfig(configStr) {
     try {
       return JSON.parse(configStr);

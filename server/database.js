@@ -118,6 +118,113 @@ function initDatabase() {
       result TEXT NOT NULL,
       details TEXT
     )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS import_audit_batches (
+      id TEXT PRIMARY KEY,
+      batch_number TEXT UNIQUE NOT NULL,
+      operator TEXT,
+      operator_ip TEXT,
+      user_agent TEXT,
+      import_type TEXT NOT NULL,
+      scenario_action TEXT,
+      execution_history_action TEXT,
+      total_imports INTEGER DEFAULT 0,
+      successful_imports INTEGER DEFAULT 0,
+      failed_imports INTEGER DEFAULT 0,
+      started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      status TEXT DEFAULT 'in_progress',
+      metadata TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS snapshot_version_chain (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT,
+      snapshot_id TEXT NOT NULL,
+      scenario_id TEXT NOT NULL,
+      execution_id TEXT,
+      previous_snapshot_id TEXT,
+      replaced_by_snapshot_id TEXT,
+      version_number INTEGER NOT NULL,
+      data TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      replaced_at TEXT,
+      replaced_by_batch_id TEXT,
+      replaced_reason TEXT,
+      FOREIGN KEY (batch_id) REFERENCES import_audit_batches(id),
+      FOREIGN KEY (scenario_id) REFERENCES scenarios(id),
+      FOREIGN KEY (execution_id) REFERENCES executions(id),
+      FOREIGN KEY (previous_snapshot_id) REFERENCES snapshots(id),
+      FOREIGN KEY (replaced_by_snapshot_id) REFERENCES snapshots(id),
+      FOREIGN KEY (replaced_by_batch_id) REFERENCES import_audit_batches(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS replaced_snapshot_details (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      import_log_id TEXT,
+      original_snapshot_id TEXT NOT NULL,
+      original_scenario_id TEXT NOT NULL,
+      original_execution_id TEXT,
+      original_execution_status TEXT,
+      original_data TEXT,
+      original_created_at TEXT,
+      replacement_snapshot_id TEXT,
+      replacement_created_at TEXT,
+      replaced_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      replaced_reason TEXT,
+      conflict_type TEXT,
+      conflict_decision TEXT,
+      operator TEXT,
+      FOREIGN KEY (batch_id) REFERENCES import_audit_batches(id),
+      FOREIGN KEY (import_log_id) REFERENCES import_logs(id),
+      FOREIGN KEY (original_scenario_id) REFERENCES scenarios(id),
+      FOREIGN KEY (original_execution_id) REFERENCES executions(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS rollback_resource_changes (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      rollback_type TEXT NOT NULL,
+      import_log_id TEXT,
+      action TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT NOT NULL,
+      resource_name TEXT,
+      previous_state TEXT,
+      new_state TEXT,
+      restored_associations TEXT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (batch_id) REFERENCES import_audit_batches(id),
+      FOREIGN KEY (import_log_id) REFERENCES import_logs(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS restart_review_records (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      review_type TEXT NOT NULL,
+      scenario_id TEXT NOT NULL,
+      scenario_name TEXT,
+      is_simulation INTEGER DEFAULT 0,
+      simulation_result TEXT,
+      real_restart_verified INTEGER DEFAULT 0,
+      restart_verified_at TEXT,
+      restart_verified_by TEXT,
+      consistency_check_passed INTEGER DEFAULT 0,
+      consistency_details TEXT,
+      errors_found TEXT,
+      warnings TEXT,
+      review_started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      review_completed_at TEXT,
+      FOREIGN KEY (batch_id) REFERENCES import_audit_batches(id),
+      FOREIGN KEY (scenario_id) REFERENCES scenarios(id)
+    )`);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_snapshot_version_chain_scenario ON snapshot_version_chain(scenario_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_snapshot_version_chain_batch ON snapshot_version_chain(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_replaced_snapshot_batch ON replaced_snapshot_details(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_rollback_changes_batch ON rollback_resource_changes(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_restart_review_batch ON restart_review_records(batch_id)`);
   });
 }
 

@@ -7,6 +7,7 @@ import FailureInjectionManager from './components/FailureInjectionManager';
 import ExecutionPanel from './components/ExecutionPanel';
 import RollbackManager from './components/RollbackManager';
 import ScenarioPackageManager from './components/ScenarioPackageManager';
+import AuditCenter from './components/AuditCenter';
 
 function App() {
   const [activeTab, setActiveTab] = useState('versions');
@@ -25,6 +26,8 @@ function App() {
         return <RollbackManager />;
       case 'packages':
         return <ScenarioPackageManager />;
+      case 'audit':
+        return <AuditCenter />;
       default:
         return <ApiVersionManager />;
     }
