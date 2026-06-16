@@ -8,6 +8,7 @@ import ExecutionPanel from './components/ExecutionPanel';
 import RollbackManager from './components/RollbackManager';
 import ScenarioPackageManager from './components/ScenarioPackageManager';
 import AuditCenter from './components/AuditCenter';
+import ForensicsWorkbench from './components/ForensicsWorkbench';
 
 function App() {
   const [activeTab, setActiveTab] = useState('versions');
@@ -26,6 +27,8 @@ function App() {
         return <RollbackManager />;
       case 'packages':
         return <ScenarioPackageManager />;
+      case 'forensics':
+        return <ForensicsWorkbench />;
       case 'audit':
         return <AuditCenter />;
       default:

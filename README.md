@@ -902,6 +902,140 @@ npm test
 
 **所有测试通过 (10/10)**
 
+### v1.4.0 独立取证工作台模块
+
+#### 新增功能
+
+1. **独立前端入口**
+   - 导航栏新增「取证工作台」入口
+   - 完整的批次列表、详情、时间线、操作记录界面
+   - 支持按状态、模式、操作者过滤批次
+
+2. **批次详情展示**
+   - 显示批次基本信息：操作者、模式、冲突决策、状态
+   - 来源文件信息：原始场景ID、快照ID、执行ID
+   - 操作记录列表：每一步操作的详细信息和时间戳
+   - 时间线事件：关键事件标记和完整事件流
+   - 恢复结果：恢复记录和验证状态
+
+3. **日志文件落盘**
+   - 按批次生成独立日志文件
+   - 日志目录: `data/forensics-logs/`
+   - 文件命名: `{日期}_{批次号}.log`
+   - 日志格式: JSON Lines，便于解析和查询
+
+4. **配置开关**
+   - 支持动态切换「仅预检」和「真实执行」模式
+   - 环境变量配置:
+     ```bash
+     FORENSICS_SIMULATE=true  # 仅预检模式
+     FORENSICS_SIMULATE=false # 真实执行模式
+     ```
+   - API 动态切换:
+     ```bash
+     curl -X POST http://localhost:3000/api/forensics-workbench/config/mode \
+       -H "Content-Type: application/json" \
+       -d '{"mode": "simulate"}'
+     ```
+
+5. **场景覆盖**
+   - **重复提交检测**: 同一场景的活跃批次不允许重复创建
+   - **同批次重放检测**: 已完成/已取消的批次不能重放
+   - **重启后继续查看**: 历史批次详情和时间线可追溯
+   - **旧日志缺失提示**: 日志文件不存在时给出明确提示
+   - **批次状态中断后恢复**: 提供恢复建议和下一步操作
+
+#### 新增文件
+
+- [ForensicsWorkbench.js](file:///d:/workSpace/AI__SPACE/zyx-00112/client/src/components/ForensicsWorkbench.js) - 前端取证工作台组件
+- [forensicsLogger.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/forensicsLogger.js) - 日志落盘服务
+
+#### 新增 API
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | /api/forensics-workbench/resume/:batchId | 获取批次恢复建议 |
+| GET | /api/forensics-workbench/log/:batchId | 获取批次日志内容 |
+| GET | /api/forensics-workbench/logs | 列出所有日志文件 |
+| POST | /api/forensics-workbench/config/mode | 动态切换运行模式 |
+| POST | /api/forensics-workbench/check-duplicate | 检查重复提交 |
+| POST | /api/forensics-workbench/check-replay/:batchNumber | 检查批次重放 |
+
+#### 复现步骤
+
+1. **启动服务**
+   ```bash
+   npm start
+   ```
+
+2. **访问取证工作台**
+   - 打开浏览器访问 http://localhost:3000
+   - 点击导航栏「取证工作台」
+
+3. **创建取证批次**
+   - 点击「新建批次」按钮
+   - 选择原始场景
+   - 选择冲突决策（save_as 或 replace）
+   - 选择运行模式（仅预检 或 真实执行）
+   - 点击「创建批次」或「执行完整链路」
+
+4. **查看批次详情**
+   - 在批次列表中点击任意批次
+   - 查看概览、操作记录、时间线、恢复结果
+
+5. **查看日志文件**
+   - 点击「查看日志」按钮
+   - 日志文件位于 `data/forensics-logs/` 目录
+
+#### 查询批次记录
+
+**通过 GUI 查询**
+1. 进入「取证工作台」页面
+2. 使用过滤器按状态、模式、操作者筛选
+3. 点击批次查看详情
+
+**通过 API 查询**
+```bash
+# 查询所有批次
+curl http://localhost:3000/api/forensics-workbench/batches
+
+# 按状态过滤
+curl "http://localhost:3000/api/forensics-workbench/batches?state=completed"
+
+# 按批次号查询
+curl http://localhost:3000/api/forensics-workbench/batch/by-number/FWB-xxx
+
+# 查看批次日志
+curl http://localhost:3000/api/forensics-workbench/log/{batchId}
+```
+
+**通过数据库查询**
+```bash
+sqlite3 data/sandbox.db
+sqlite> SELECT * FROM forensics_batches ORDER BY started_at DESC;
+sqlite> SELECT * FROM forensics_operations WHERE batch_id = 'xxx';
+sqlite> SELECT * FROM forensics_timeline WHERE batch_id = 'xxx';
+```
+
+#### 验证测试
+
+运行完整验证测试:
+```bash
+node test/forensics-workbench-complete-test.js
+```
+
+测试覆盖:
+- Test 1: GUI 可见入口
+- Test 2: 批次详情
+- Test 3: 日志落盘
+- Test 4: 配置切换生效
+- Test 5: 重复提交检测
+- Test 6: 同批次重放检测
+- Test 7: 批次状态中断后恢复
+- Test 8: 跨重启可追溯
+- Test 9: 旧日志缺失提示
+- Test 10: 完整链路执行
+
 ## License
 
 MIT

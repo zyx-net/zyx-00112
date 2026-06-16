@@ -89,3 +89,46 @@ export const auditCenterApi = {
   completeBatch: (batchId, success = true) =>
     axios.post(`${API_BASE}/audit-center/complete-batch/${batchId}`, { success })
 };
+
+export const forensicsWorkbenchApi = {
+  initialize: (data) => 
+    axios.post(`${API_BASE}/forensics-workbench/initialize`, data),
+  preCheck: (batchId) => 
+    axios.post(`${API_BASE}/forensics-workbench/pre-check/${batchId}`),
+  replaceImport: (batchId, data) => 
+    axios.post(`${API_BASE}/forensics-workbench/replace-import/${batchId}`, data),
+  rollback: (batchId, confirm = false) => 
+    axios.post(`${API_BASE}/forensics-workbench/rollback/${batchId}${confirm ? '/confirm' : ''}`),
+  restartReview: (batchId, isSimulation = true) => 
+    axios.post(`${API_BASE}/forensics-workbench/restart-review/${batchId}`, { is_simulation: isSimulation }),
+  reImport: (batchId, data) => 
+    axios.post(`${API_BASE}/forensics-workbench/re-import/${batchId}`, data),
+  getBatchById: (batchId) => 
+    axios.get(`${API_BASE}/forensics-workbench/batch/${batchId}`),
+  getBatchByNumber: (batchNumber) => 
+    axios.get(`${API_BASE}/forensics-workbench/batch/by-number/${batchNumber}`),
+  getTimeline: (batchId) => 
+    axios.get(`${API_BASE}/forensics-workbench/timeline/${batchId}`),
+  getBatches: (filters = {}) => 
+    axios.get(`${API_BASE}/forensics-workbench/batches`, { params: filters }),
+  completeBatch: (batchId) => 
+    axios.post(`${API_BASE}/forensics-workbench/complete/${batchId}`),
+  cancelBatch: (batchId, reason) => 
+    axios.post(`${API_BASE}/forensics-workbench/cancel/${batchId}`, { reason }),
+  verifyRecovery: (batchId, recoveryRecordId, notes, operator) => 
+    axios.post(`${API_BASE}/forensics-workbench/verify-recovery/${batchId}/${recoveryRecordId}`, { notes, operator }),
+  getConfig: () => 
+    axios.get(`${API_BASE}/forensics-workbench/config`),
+  getPendingBatches: () => 
+    axios.get(`${API_BASE}/forensics-workbench/pending`),
+  fullChain: (data) => 
+    axios.post(`${API_BASE}/forensics-workbench/full-chain`, data),
+  resumeBatch: (batchId) => 
+    axios.post(`${API_BASE}/forensics-workbench/resume/${batchId}`),
+  getBatchLog: (batchId) => 
+    axios.get(`${API_BASE}/forensics-workbench/log/${batchId}`),
+  setMode: (mode) => 
+    axios.post(`${API_BASE}/forensics-workbench/config/mode`, { mode }),
+  checkDuplicate: (data) => 
+    axios.post(`${API_BASE}/forensics-workbench/check-duplicate`, data)
+};

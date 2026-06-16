@@ -312,6 +312,22 @@ router.get('/config', async (req, res) => {
   }
 });
 
+router.post('/config/mode', async (req, res) => {
+  try {
+    const { mode } = req.body;
+    const simulate = mode === 'simulate';
+    
+    const result = forensicsWorkbenchService.setMode(simulate);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/pending', async (req, res) => {
   try {
     const { forensicsBatchDao } = require('../dao/forensicsWorkbenchDao');
@@ -438,6 +454,78 @@ router.post('/full-chain', async (req, res) => {
     res.json({
       success: chainResult.final_state === 'completed',
       chain_result: chainResult
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/resume/:batchId', async (req, res) => {
+  try {
+    const result = await forensicsWorkbenchService.resumeBatch(req.params.batchId);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/log/:batchId', async (req, res) => {
+  try {
+    const result = await forensicsWorkbenchService.getBatchLog(req.params.batchId);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/logs', async (req, res) => {
+  try {
+    const logs = forensicsWorkbenchService.listLogFiles();
+
+    res.json({
+      success: true,
+      logs: logs,
+      count: logs.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/check-duplicate', async (req, res) => {
+  try {
+    const { scenario_id, conflict_decision } = req.body;
+
+    if (!scenario_id) {
+      return res.status(400).json({ error: '缺少 scenario_id' });
+    }
+
+    const result = await forensicsWorkbenchService.checkDuplicateSubmission(scenario_id, conflict_decision);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/check-replay/:batchNumber', async (req, res) => {
+  try {
+    const result = await forensicsWorkbenchService.checkBatchReplay(req.params.batchNumber);
+
+    res.json({
+      success: true,
+      ...result
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
