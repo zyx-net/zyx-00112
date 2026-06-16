@@ -148,7 +148,7 @@ class AuditExecutionBatchDao {
     return new Promise((resolve, reject) => {
       db.all(
         `SELECT * FROM audit_execution_batches 
-         WHERE scenario_id = ? AND state IN ('pending', 'in_progress', 'pre_check')
+         WHERE scenario_id = ? AND state IN ('pending', 'pre_check', 'pre_check_passed', 'in_progress')
          ORDER BY started_at DESC`,
         [scenarioId],
         (err, rows) => {

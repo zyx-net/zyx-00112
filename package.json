@@ -9,6 +9,7 @@
     "build": "cd client && npm run build",
     "install-all": "npm install && cd client && npm install",
     "test": "node test/regression-test.js",
+    "test:audit-execution": "node test/audit-execution-integration-test.js",
     "test:packages": "node test/scenario-package-regression.js",
     "test:replace": "node test/scenario-import-replace-branch.js",
     "test:traceability": "node test/scenario-import-traceability.js",
