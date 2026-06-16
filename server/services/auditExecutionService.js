@@ -17,6 +17,52 @@ class AuditExecutionService {
   constructor() {
     this.logsDir = path.join(path.dirname(config.dbPath), 'audit-logs');
     this.ensureLogsDir();
+    
+    this.STATES = {
+      PENDING: 'pending',
+      PRE_CHECK: 'pre_check',
+      PRE_CHECK_PASSED: 'pre_check_passed',
+      PRE_CHECK_FAILED: 'pre_check_failed',
+      IN_PROGRESS: 'in_progress',
+      COMPLETED: 'completed',
+      FAILED: 'failed',
+      CANCELLED: 'cancelled',
+      RECOVERING: 'recovering',
+      RECOVERED: 'recovered',
+      RECOVERY_FAILED: 'recovery_failed'
+    };
+
+    this.STATE_TRANSITIONS = {
+      [this.STATES.PENDING]: [this.STATES.PRE_CHECK, this.STATES.IN_PROGRESS, this.STATES.CANCELLED],
+      [this.STATES.PRE_CHECK]: [this.STATES.PRE_CHECK_PASSED, this.STATES.PRE_CHECK_FAILED],
+      [this.STATES.PRE_CHECK_PASSED]: [this.STATES.IN_PROGRESS, this.STATES.CANCELLED],
+      [this.STATES.PRE_CHECK_FAILED]: [this.STATES.PRE_CHECK, this.STATES.CANCELLED],
+      [this.STATES.IN_PROGRESS]: [this.STATES.COMPLETED, this.STATES.FAILED],
+      [this.STATES.COMPLETED]: [],
+      [this.STATES.FAILED]: [this.STATES.RECOVERING, this.STATES.CANCELLED],
+      [this.STATES.CANCELLED]: [],
+      [this.STATES.RECOVERING]: [this.STATES.RECOVERED, this.STATES.RECOVERY_FAILED],
+      [this.STATES.RECOVERED]: [],
+      [this.STATES.RECOVERY_FAILED]: [this.STATES.RECOVERING]
+    };
+  }
+
+  isValidTransition(currentState, newState) {
+    const allowedTransitions = this.STATE_TRANSITIONS[currentState] || [];
+    return allowedTransitions.includes(newState);
+  }
+
+  async validateAndUpdateState(batchId, newState) {
+    const batch = await auditExecutionBatchDao.getById(batchId);
+    if (!batch) {
+      throw new Error('批次不存在');
+    }
+
+    if (!this.isValidTransition(batch.state, newState)) {
+      throw new Error(`非法状态转换: ${batch.state} -> ${newState}`);
+    }
+
+    return await auditExecutionBatchDao.update(batchId, { state: newState });
   }
 
   ensureLogsDir() {
@@ -117,14 +163,15 @@ class AuditExecutionService {
       throw new Error('批次不存在');
     }
 
-    await auditExecutionBatchDao.update(batchId, { state: 'pre_check' });
+    await this.validateAndUpdateState(batchId, this.STATES.PRE_CHECK);
     await this.addTimelineEvent(batchId, 'pre_check_start', batch.operator, '开始预检查');
     await this.log(batchId, 'info', 'pre_check_start', `批次 ${batch.batch_number} 开始预检查`);
 
     const checkResults = await this._performPreChecks(batch);
     
+    const newState = checkResults.all_passed ? this.STATES.PRE_CHECK_PASSED : this.STATES.PRE_CHECK_FAILED;
     await auditExecutionBatchDao.update(batchId, { 
-      state: checkResults.all_passed ? 'pre_check_passed' : 'pre_check_failed',
+      state: newState,
       hit_items: checkResults.hit_items
     });
 
@@ -198,11 +245,7 @@ class AuditExecutionService {
       throw new Error('批次不存在');
     }
 
-    if (batch.state !== 'pre_check_passed' && batch.state !== 'pending') {
-      throw new Error(`当前状态不允许执行: ${batch.state}`);
-    }
-
-    await auditExecutionBatchDao.update(batchId, { state: 'in_progress' });
+    await this.validateAndUpdateState(batchId, this.STATES.IN_PROGRESS);
     await this.addTimelineEvent(batchId, 'execution_start', batch.operator, '开始执行');
     await this.log(batchId, 'info', 'execution_start', `批次 ${batch.batch_number} 开始执行，模式: ${batch.mode}`);
 
@@ -221,8 +264,9 @@ class AuditExecutionService {
       await this.log(batchId, 'error', 'execution_failed', `批次 ${batch.batch_number} 执行失败: ${error.message}`, { error_code: 'EXEC_ERROR' });
     }
 
+    const finalState = success ? this.STATES.COMPLETED : this.STATES.FAILED;
     await auditExecutionBatchDao.update(batchId, { 
-      state: success ? 'completed' : 'failed',
+      state: finalState,
       completed_at: new Date().toISOString(),
       failure_reason: failureReason
     });
@@ -283,18 +327,15 @@ class AuditExecutionService {
       throw new Error('批次不存在');
     }
 
-    if (batch.state !== 'failed') {
-      throw new Error('只有失败的批次才能恢复');
-    }
-
-    await auditExecutionBatchDao.update(batchId, { state: 'recovering' });
+    await this.validateAndUpdateState(batchId, this.STATES.RECOVERING);
     await this.addTimelineEvent(batchId, 'recovery_start', operator, '开始恢复');
     await this.log(batchId, 'info', 'recovery_start', `批次 ${batch.batch_number} 开始恢复`);
 
     const recoveryResult = await this._performRecovery(batch);
 
+    const finalState = recoveryResult.success ? this.STATES.RECOVERED : this.STATES.RECOVERY_FAILED;
     await auditExecutionBatchDao.update(batchId, { 
-      state: recoveryResult.success ? 'recovered' : 'recovery_failed',
+      state: finalState,
       recovery_result: JSON.stringify(recoveryResult)
     });
 
@@ -348,10 +389,8 @@ class AuditExecutionService {
       throw new Error('批次不存在');
     }
 
-    await auditExecutionBatchDao.update(batchId, { 
-      state: 'completed',
-      completed_at: new Date().toISOString()
-    });
+    await this.validateAndUpdateState(batchId, this.STATES.COMPLETED);
+    await auditExecutionBatchDao.update(batchId, { completed_at: new Date().toISOString() });
 
     await this.addTimelineEvent(batchId, 'batch_completed', batch.operator, '批次已完成');
     await this.log(batchId, 'info', 'batch_completed', `批次 ${batch.batch_number} 已完成`);
@@ -367,14 +406,8 @@ class AuditExecutionService {
       throw new Error('批次不存在');
     }
 
-    if (batch.state === 'completed') {
-      throw new Error('已完成的批次不能取消');
-    }
-
-    await auditExecutionBatchDao.update(batchId, { 
-      state: 'cancelled',
-      completed_at: new Date().toISOString()
-    });
+    await this.validateAndUpdateState(batchId, this.STATES.CANCELLED);
+    await auditExecutionBatchDao.update(batchId, { completed_at: new Date().toISOString() });
 
     await this.addTimelineEvent(batchId, 'batch_cancelled', operator, '批次已取消');
     await this.log(batchId, 'info', 'batch_cancelled', `批次 ${batch.batch_number} 已被 ${operator} 取消`);
@@ -388,10 +421,23 @@ class AuditExecutionService {
       return null;
     }
 
-    const logs = await auditLogEntryDao.getByBatchIdOrdered(batchId);
-    const timeline = await auditTimelineDao.getByBatchId(batchId);
-    const conflictDecisions = await auditConflictDecisionDao.getByBatchId(batchId);
-    const recoveryRecords = await auditRecoveryRecordDao.getByBatchId(batchId);
+    return await this._buildBatchDetails(batch);
+  }
+
+  async getBatchDetailsByNumber(batchNumber) {
+    const batch = await auditExecutionBatchDao.getByBatchNumber(batchNumber);
+    if (!batch) {
+      return null;
+    }
+
+    return await this._buildBatchDetails(batch);
+  }
+
+  async _buildBatchDetails(batch) {
+    const logs = await auditLogEntryDao.getByBatchIdOrdered(batch.id);
+    const timeline = await auditTimelineDao.getByBatchId(batch.id);
+    const conflictDecisions = await auditConflictDecisionDao.getByBatchId(batch.id);
+    const recoveryRecords = await auditRecoveryRecordDao.getByBatchId(batch.id);
 
     return {
       ...batch,
@@ -399,7 +445,8 @@ class AuditExecutionService {
       timeline,
       conflict_decisions: conflictDecisions,
       recovery_records: recoveryRecords,
-      has_log_file: this.checkLogFileExists(batch.batch_number)
+      has_log_file: this.checkLogFileExists(batch.batch_number),
+      log_file_missing: !this.checkLogFileExists(batch.batch_number) && batch.state === 'completed'
     };
   }
 
@@ -490,14 +537,57 @@ class AuditExecutionService {
   async getLogFileContent(batchNumber) {
     const logPath = path.join(this.logsDir, `${batchNumber}.log`);
     if (!fs.existsSync(logPath)) {
-      return null;
+      return { 
+        exists: false, 
+        content: null, 
+        error: 'LOG_FILE_MISSING',
+        message: '日志文件不存在，可能已被删除或尚未生成'
+      };
     }
     try {
       const content = fs.readFileSync(logPath, 'utf8');
-      return content.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
+      const lines = content.split('\n').filter(line => line.trim());
+      const parsedLogs = lines.map((line, index) => {
+        try {
+          return JSON.parse(line);
+        } catch (e) {
+          return { 
+            parse_error: true, 
+            line_number: index + 1, 
+            raw_content: line,
+            message: '日志行解析失败'
+          };
+        }
+      });
+      return { 
+        exists: true, 
+        content: parsedLogs,
+        error: null,
+        message: '日志文件读取成功'
+      };
     } catch (err) {
-      return null;
+      return { 
+        exists: false, 
+        content: null, 
+        error: 'LOG_READ_ERROR',
+        message: `日志文件读取失败: ${err.message}`
+      };
     }
+  }
+
+  async regenerateLogFile(batchId) {
+    const batch = await auditExecutionBatchDao.getById(batchId);
+    if (!batch) {
+      throw new Error('批次不存在');
+    }
+
+    const logs = await auditLogEntryDao.getByBatchIdOrdered(batchId);
+    if (logs.length === 0) {
+      return { success: false, message: '数据库中无日志记录可恢复' };
+    }
+
+    await this.writeLogToFile(batch);
+    return { success: true, message: '日志文件已从数据库恢复', log_count: logs.length };
   }
 
   async listLogFiles() {

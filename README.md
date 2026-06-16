@@ -1032,6 +1032,44 @@ node test/audit-execution-test.js
 - 重复提交检测
 - 批次重放检测
 - 恢复建议获取
+- 按批次号查询批次详情
+- 状态机验证（非法状态转换拦截）
+- 日志文件缺失提示
+
+#### 状态机
+
+执行审计台实现了严格的状态机，确保状态转换的一致性：
+
+```
+pending → pre_check → pre_check_passed → in_progress → completed
+       ↘            ↘                   ↘
+        → pre_check_failed              → failed → recovering → recovered
+         ↘                                    ↘              ↘
+          → cancelled                         → cancelled    → recovery_failed
+```
+
+**状态转换规则**:
+| 当前状态 | 允许转换到 |
+|---------|-----------|
+| pending | pre_check, in_progress, cancelled |
+| pre_check | pre_check_passed, pre_check_failed |
+| pre_check_passed | in_progress, cancelled |
+| pre_check_failed | pre_check, cancelled |
+| in_progress | completed, failed |
+| completed | (无) |
+| failed | recovering, cancelled |
+| cancelled | (无) |
+| recovering | recovered, recovery_failed |
+| recovered | (无) |
+| recovery_failed | recovering |
+
+#### 新增 API
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | /api/audit-execution/batches/by-number/:batchNumber | 按批次号查询 |
+| POST | /api/audit-execution/batches/:batchId/regenerate-log | 从数据库恢复日志文件 |
+| GET | /api/audit-execution/logs/:batchNumber | 获取日志文件内容 |
 
 ### v1.4.0 独立取证工作台模块
 

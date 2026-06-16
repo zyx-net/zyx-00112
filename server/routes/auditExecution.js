@@ -188,14 +188,34 @@ router.get('/logs', async (req, res) => {
 
 router.get('/logs/:batchNumber', async (req, res) => {
   try {
-    const content = await auditExecutionService.getLogFileContent(req.params.batchNumber);
-    if (!content) {
-      res.status(404).json({ error: '日志文件不存在' });
+    const result = await auditExecutionService.getLogFileContent(req.params.batchNumber);
+    if (!result.exists) {
+      res.status(404).json({ 
+        error: result.error, 
+        message: result.message,
+        exists: false 
+      });
     } else {
-      res.json(content);
+      res.json({ 
+        ...result,
+        exists: true 
+      });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/batches/:batchId/regenerate-log', async (req, res) => {
+  try {
+    const result = await auditExecutionService.regenerateLogFile(req.params.batchId);
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 
