@@ -12,6 +12,7 @@ const fieldMappingsRouter = require('./routes/fieldMappings');
 const compatibilityStrategiesRouter = require('./routes/compatibilityStrategies');
 const scenarioPackagesRouter = require('./routes/scenarioPackages');
 const auditCenterRouter = require('./routes/auditCenter');
+const forensicsWorkbenchRouter = require('./routes/forensicsWorkbench');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/field-mappings', fieldMappingsRouter);
 app.use('/api/compatibility-strategies', compatibilityStrategiesRouter);
 app.use('/api/scenario-packages', scenarioPackagesRouter);
 app.use('/api/audit-center', auditCenterRouter);
+app.use('/api/forensics-workbench', forensicsWorkbenchRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build', 'index.html'));

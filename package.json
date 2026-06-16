@@ -13,7 +13,8 @@
     "test:replace": "node test/scenario-import-replace-branch.js",
     "test:traceability": "node test/scenario-import-traceability.js",
     "test:complete": "node test/scenario-import-complete-replace-test.js",
-    "test:all": "node test/regression-test.js && node test/scenario-package-regression.js && node test/scenario-import-replace-branch.js && node test/scenario-import-traceability.js && node test/scenario-import-complete-replace-test.js"
+    "test:forensics": "node test/forensics-workbench-test.js",
+    "test:all": "node test/regression-test.js && node test/scenario-package-regression.js && node test/scenario-import-replace-branch.js && node test/scenario-import-traceability.js && node test/scenario-import-complete-replace-test.js && node test/forensics-workbench-test.js"
   },
   "dependencies": {
     "axios": "^1.18.0",

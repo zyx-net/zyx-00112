@@ -225,6 +225,114 @@ function initDatabase() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_replaced_snapshot_batch ON replaced_snapshot_details(batch_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_rollback_changes_batch ON rollback_resource_changes(batch_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_restart_review_batch ON restart_review_records(batch_id)`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS forensics_batches (
+      id TEXT PRIMARY KEY,
+      batch_number TEXT UNIQUE NOT NULL,
+      operator TEXT,
+      operator_ip TEXT,
+      user_agent TEXT,
+      mode TEXT NOT NULL DEFAULT 'simulate',
+      state TEXT NOT NULL DEFAULT 'pending',
+      scenario_id TEXT,
+      scenario_name TEXT,
+      original_scenario_id TEXT,
+      original_snapshot_id TEXT,
+      original_execution_id TEXT,
+      conflict_decision TEXT,
+      replacement_scenario_id TEXT,
+      replacement_snapshot_id TEXT,
+      rollback_execution_id TEXT,
+      restart_review_id TEXT,
+      started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      metadata TEXT,
+      FOREIGN KEY (scenario_id) REFERENCES scenarios(id),
+      FOREIGN KEY (original_scenario_id) REFERENCES scenarios(id),
+      FOREIGN KEY (original_snapshot_id) REFERENCES snapshots(id),
+      FOREIGN KEY (original_execution_id) REFERENCES executions(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS forensics_operations (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      operation_type TEXT NOT NULL,
+      operation_order INTEGER NOT NULL,
+      operator TEXT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      previous_state TEXT,
+      new_state TEXT,
+      details TEXT,
+      is_reversible INTEGER DEFAULT 1,
+      reverse_operation_id TEXT,
+      FOREIGN KEY (batch_id) REFERENCES forensics_batches(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS forensics_timeline (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      event_order INTEGER NOT NULL,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      actor TEXT,
+      source_module TEXT,
+      target_resource_type TEXT,
+      target_resource_id TEXT,
+      event_data TEXT,
+      is_critical INTEGER DEFAULT 0,
+      FOREIGN KEY (batch_id) REFERENCES forensics_batches(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS forensics_replaced_snapshots (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      operation_id TEXT,
+      original_snapshot_id TEXT NOT NULL,
+      original_scenario_id TEXT NOT NULL,
+      original_execution_id TEXT,
+      original_execution_status TEXT,
+      original_data TEXT,
+      original_created_at TEXT,
+      replaced_by_snapshot_id TEXT,
+      replaced_by_scenario_id TEXT,
+      replaced_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      replaced_reason TEXT,
+      conflict_type TEXT,
+      conflict_decision TEXT,
+      operator TEXT,
+      FOREIGN KEY (batch_id) REFERENCES forensics_batches(id),
+      FOREIGN KEY (original_scenario_id) REFERENCES scenarios(id),
+      FOREIGN KEY (original_execution_id) REFERENCES executions(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS forensics_recovery_records (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      recovery_type TEXT NOT NULL,
+      original_resource_type TEXT NOT NULL,
+      original_resource_id TEXT NOT NULL,
+      original_resource_name TEXT,
+      recovery_state TEXT NOT NULL,
+      recovery_data TEXT,
+      recovery_timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      verified INTEGER DEFAULT 0,
+      verified_by TEXT,
+      verified_at TEXT,
+      verification_notes TEXT,
+      FOREIGN KEY (batch_id) REFERENCES forensics_batches(id)
+    )`);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_batches_batch_number ON forensics_batches(batch_number)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_batches_scenario ON forensics_batches(scenario_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_batches_state ON forensics_batches(state)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_batches_mode ON forensics_batches(mode)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_operations_batch ON forensics_operations(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_timeline_batch ON forensics_timeline(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_timeline_order ON forensics_timeline(batch_id, event_order)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_replaced_batch ON forensics_replaced_snapshots(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_recovery_batch ON forensics_recovery_records(batch_id)`);
   });
 }
 

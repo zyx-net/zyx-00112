@@ -28,6 +28,14 @@
 4. **导入撤销** - 可撤销最近一次导入，恢复导入前的状态
 5. **变更追踪** - 所有导入、导出、冲突决策和撤销动作都记入日志
 
+### 回滚取证工作台（v1.3.0 新增）
+1. **完整链路追踪** - 将 replace 导入、回滚确认、重启复查和操作留痕串成一条可单独验收的完整链路
+2. **详细数据存储** - 被替换快照的原始版本、所属 execution、冲突决策、操作者、批次号、时间线和恢复结果全部落到 SQLite
+3. **多端查询支持** - GUI、CLI、日志里都能按批次直接查到明细
+4. **配置开关** - 支持模拟检查（simulate）和真实回滚（real）两种模式，明确区分
+5. **场景覆盖** - 重复导入、回滚后再次导入、缺失旧快照、跨重启复查等场景均有可追踪的提示和错误日志
+6. **自动化验证** - 提供 save_as、replace、导入后撤销、重启后一致性等自动化测试脚本
+
 ## 技术栈
 
 - **后端**: Node.js + Express + SQLite
@@ -216,6 +224,30 @@ npm start
 | POST | /api/scenario-packages/rollback | 撤销最近导入 |
 | GET | /api/scenario-packages/scenarios-with-history | 获取带历史的场景列表 |
 
+### 回滚取证工作台
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | /api/forensics-workbench/initialize | 初始化取证批次 |
+| POST | /api/forensics-workbench/pre-check/:batchId | 执行预检查 |
+| POST | /api/forensics-workbench/replace-import/:batchId | 执行替换导入 |
+| POST | /api/forensics-workbench/rollback/:batchId | 执行回滚 |
+| POST | /api/forensics-workbench/rollback/:batchId/confirm | 确认回滚 |
+| POST | /api/forensics-workbench/restart-review/:batchId | 执行重启复查 |
+| POST | /api/forensics-workbench/restart-review/:batchId/simulation | 执行模拟复查 |
+| POST | /api/forensics-workbench/re-import/:batchId | 回滚后重新导入 |
+| GET | /api/forensics-workbench/batch/:batchId | 获取批次详情 |
+| GET | /api/forensics-workbench/batch/by-number/:batchNumber | 按批次号查询 |
+| GET | /api/forensics-workbench/timeline/:batchId | 获取时间线 |
+| GET | /api/forensics-workbench/batches | 列出所有批次 |
+| POST | /api/forensics-workbench/complete/:batchId | 完成批次 |
+| POST | /api/forensics-workbench/cancel/:batchId | 取消批次 |
+| POST | /api/forensics-workbench/verify-recovery/:batchId/:recoveryRecordId | 验证恢复记录 |
+| POST | /api/forensics-workbench/handle-missing-snapshot/:batchId | 处理缺失快照场景 |
+| GET | /api/forensics-workbench/config | 获取配置信息 |
+| GET | /api/forensics-workbench/pending | 获取待处理批次 |
+| POST | /api/forensics-workbench/full-chain | 执行完整链路 |
+
 ## 项目结构
 
 ```
@@ -337,7 +369,7 @@ npm start
 4. 确认该场景已被删除
 5. 确认导入日志仍保留
 
-### 测试用例12：同名场景覆盖导入
+### 测试用例13：同名场景覆盖导入
 
 1. 创建API版本和场景A
 2. 为场景A添加失败注入并执行
@@ -349,7 +381,7 @@ npm start
 8. 确认替换场景的所有关联数据（执行历史、快照、失败注入）被清除
 9. 查看导入日志，确认追溯信息包含替换场景的详情
 
-### 测试用例13：导入追溯信息验证
+### 测试用例14：导入追溯信息验证
 
 1. 创建API版本和场景
 2. 执行场景生成执行历史
@@ -361,6 +393,237 @@ npm start
 8. 确认replace日志包含：新场景ID（同名）、替换场景详情（包含被替换场景的执行和快照数量）
 9. 执行撤销操作
 10. 确认撤销日志包含：被撤销的场景ID、清理的资源统计（执行数、快照数等）
+
+### 测试用例15：回滚取证工作台 - Save As 链路
+
+1. 创建API版本和场景
+2. 执行场景生成执行历史和快照
+3. 导出场景包
+4. 初始化取证工作台批次（save_as 决策）
+5. 执行预检查，确认通过
+6. 执行替换导入（save_as）
+7. 执行回滚并确认
+8. 执行重启复查（模拟模式）
+9. 查看批次详情，确认：
+   - 操作列表包含初始化、预检查、导入、回滚、复查等
+   - 时间线记录完整
+   - 替换快照有详细记录
+   - 恢复记录可追踪
+10. 验证批次状态为 completed
+
+### 测试用例16：回滚取证工作台 - Replace 链路
+
+1. 创建API版本和两个场景（场景1、场景2）
+2. 为场景1添加执行历史和快照
+3. 导出场景1的包
+4. 初始化取证工作台批次（replace 决策）
+5. 执行预检查
+6. 执行替换导入（replace）
+7. 查看批次详情中的 replaced_snapshots
+8. 确认替换快照包含：
+   - 原始快照ID和场景ID
+   - 冲突决策（replace）
+   - 替换原因
+9. 执行回滚
+10. 验证恢复记录追踪了旧场景的恢复
+
+### 测试用例17：回滚取证工作台 - 导入后撤销
+
+1. 创建API版本和场景
+2. 执行场景生成执行历史
+3. 导出场景包
+4. 初始化取证工作台批次
+5. 执行完整链路
+6. 在回滚前记录操作数
+7. 执行回滚
+8. 验证操作数增加
+9. 确认回滚操作记录了 previous_state 和 new_state
+
+### 测试用例18：回滚取证工作台 - 重启一致性
+
+1. 创建API版本和场景
+2. 执行场景3次，生成多条执行记录和快照
+3. 导出场景包
+4. 初始化取证工作台批次
+5. 执行完整链路（包含重启复查）
+6. 验证复查结果包含：
+   - 正确的执行数量（3）
+   - 正确的快照数量
+   - 一致性检查通过
+7. 验证关键事件（critical events）至少2个
+8. 验证时间线事件完整
+
+## 回滚取证工作台使用指南
+
+### 配置开关
+
+回滚取证工作台支持通过环境变量配置：
+
+```bash
+# 启用/禁用取证工作台（默认启用）
+FORENSICS_ENABLED=true
+
+# 模拟模式开关（默认关闭，即真实模式）
+FORENSICS_SIMULATE=true
+
+# 要求明确确认（默认启用）
+FORENSICS_REQUIRE_CONFIRM=true
+
+# 自动恢复（默认关闭）
+FORENSICS_AUTO_RECOVERY=true
+
+# 严格验证（默认启用）
+FORENSICS_STRICT=true
+```
+
+### 完整链路执行
+
+#### 方式一：分步执行
+
+1. **初始化批次**
+```bash
+curl -X POST http://localhost:3000/api/forensics-workbench/initialize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operator": "admin",
+    "original_scenario_id": "scenario-uuid",
+    "conflict_decision": "save_as"
+  }'
+```
+
+2. **预检查**
+```bash
+curl -X POST http://localhost:3000/api/forensics-workbench/pre-check/{batchId}
+```
+
+3. **替换导入**
+```bash
+curl -X POST http://localhost:3000/api/forensics-workbench/replace-import/{batchId} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "package_data": { ... },
+    "decisions": { "scenario_action": "save_as" }
+  }'
+```
+
+4. **回滚确认**
+```bash
+curl -X POST http://localhost:3000/api/forensics-workbench/rollback/{batchId}/confirm
+```
+
+5. **重启复查**
+```bash
+curl -X POST http://localhost:3000/api/forensics-workbench/restart-review/{batchId}
+```
+
+#### 方式二：一键执行完整链路
+
+```bash
+curl -X POST http://localhost:3000/api/forensics-workbench/full-chain \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operator": "admin",
+    "package_data": { ... },
+    "decisions": { "scenario_action": "save_as" },
+    "original_scenario_id": "scenario-uuid",
+    "skip_restart_review": false
+  }'
+```
+
+### 查询批次和恢复结果
+
+#### 按批次ID查询
+```bash
+curl http://localhost:3000/api/forensics-workbench/batch/{batchId}
+```
+
+#### 按批次号查询
+```bash
+curl http://localhost:3000/api/forensics-workbench/batch/by-number/{batchNumber}
+```
+
+#### 查看时间线
+```bash
+curl http://localhost:3000/api/forensics-workbench/timeline/{batchId}
+```
+
+#### 查看所有批次（支持过滤）
+```bash
+# 查看所有批次
+curl http://localhost:3000/api/forensics-workbench/batches
+
+# 按状态过滤
+curl http://localhost:3000/api/forensics-workbench/batches?state=completed
+
+# 按模式过滤
+curl http://localhost:3000/api/forensics-workbench/batches?mode=simulate
+
+# 按操作者过滤
+curl http://localhost:3000/api/forensics-workbench/batches?operator=admin
+```
+
+### 查看批次详情
+
+批次详情包含以下关键信息：
+
+- **batch_number**: 批次号，格式为 FWB-{timestamp}-{random}
+- **state**: 批次状态（pending, pre_check, pre_check_passed, replace_import, rollback_confirm, rollback_completed, restart_review, completed, failed, cancelled）
+- **mode**: 运行模式（simulate 或 real）
+- **operations**: 操作列表，包含每一步的详细信息
+- **timeline**: 时间线事件，按顺序记录所有关键节点
+- **replaced_snapshots**: 被替换快照的详细记录
+- **recovery_records**: 恢复记录，包含恢复的资源类型、状态等
+- **critical_events**: 关键事件标记
+- **summary**: 汇总统计
+
+### 场景覆盖
+
+#### 重复导入
+- 自动检测重复导入场景
+- 生成警告提示
+- 记录到批次元数据
+
+#### 回滚后再次导入
+- 验证原批次状态
+- 支持 save_as 或 replace
+- 记录重新导入操作
+
+#### 缺失旧快照
+- 预检查阶段检测
+- 记录错误码 FWB_E002
+- 支持手动干预处理
+
+#### 跨重启复查
+- 验证执行记录与快照关联
+- 检测失效关联
+- 生成错误和警告列表
+
+### 日志追踪
+
+所有操作都会记录到 SQLite 数据库，可以通过以下方式查看：
+
+1. **GUI**: 访问 Web 界面查看批次详情
+2. **CLI**: 使用上述 API 查询
+3. **日志文件**: 服务启动后，日志文件位于 `data/logs/` 目录
+
+批次信息落库示例：
+```json
+{
+  "batch_number": "FWB-1712345678900-abc123",
+  "operator": "admin",
+  "state": "completed",
+  "mode": "simulate",
+  "started_at": "2024-04-05T10:30:00.000Z",
+  "completed_at": "2024-04-05T10:35:00.000Z",
+  "summary": {
+    "total_operations": 5,
+    "total_timeline_events": 7,
+    "replaced_snapshots_count": 1,
+    "recovery_records_count": 1,
+    "critical_events_count": 2
+  }
+}
+```
 
 ## 修复记录
 
