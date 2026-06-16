@@ -7,7 +7,8 @@ const Navigation = ({ activeTab, setActiveTab }) => {
  { id: 'rollback', label: '回滚管理' },
  { id: 'packages', label: '场景包' },
  { id: 'forensics', label: '取证工作台' },
- { id: 'audit', label: '审计中心' }
+ { id: 'audit', label: '审计中心' },
+ { id: 'audit-execution', label: '执行审计台' }
  ];
  return (<nav style={{ backgroundColor: '#34495e', padding: '0 2rem' }}>
  <ul style={{ display: 'flex', listStyle: 'none', margin: 0, padding: 0 }}>

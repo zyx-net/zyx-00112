@@ -9,6 +9,7 @@ import RollbackManager from './components/RollbackManager';
 import ScenarioPackageManager from './components/ScenarioPackageManager';
 import AuditCenter from './components/AuditCenter';
 import ForensicsWorkbench from './components/ForensicsWorkbench';
+import AuditExecutionPanel from './components/AuditExecutionPanel';
 
 function App() {
   const [activeTab, setActiveTab] = useState('versions');
@@ -31,6 +32,8 @@ function App() {
         return <ForensicsWorkbench />;
       case 'audit':
         return <AuditCenter />;
+      case 'audit-execution':
+        return <AuditExecutionPanel />;
       default:
         return <ApiVersionManager />;
     }

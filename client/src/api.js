@@ -132,3 +132,52 @@ export const forensicsWorkbenchApi = {
   checkDuplicate: (data) => 
     axios.post(`${API_BASE}/forensics-workbench/check-duplicate`, data)
 };
+
+export const auditExecutionApi = {
+  createBatch: (operator, scenarioId, mode = 'preview', requestInfo = {}) =>
+    axios.post(`${API_BASE}/audit-execution/batches`, {
+      operator,
+      scenarioId,
+      mode,
+      ...requestInfo
+    }),
+  getBatches: (filters = {}) =>
+    axios.get(`${API_BASE}/audit-execution/batches`, { params: filters }),
+  getBatchById: (batchId) =>
+    axios.get(`${API_BASE}/audit-execution/batches/${batchId}`),
+  getBatchByNumber: (batchNumber) =>
+    axios.get(`${API_BASE}/audit-execution/batches/by-number/${batchNumber}`),
+  updateMode: (batchId, mode) =>
+    axios.put(`${API_BASE}/audit-execution/batches/${batchId}/mode`, { mode }),
+  runPreCheck: (batchId) =>
+    axios.post(`${API_BASE}/audit-execution/batches/${batchId}/pre-check`),
+  execute: (batchId) =>
+    axios.post(`${API_BASE}/audit-execution/batches/${batchId}/execute`),
+  completeBatch: (batchId) =>
+    axios.post(`${API_BASE}/audit-execution/batches/${batchId}/complete`),
+  cancelBatch: (batchId, operator) =>
+    axios.post(`${API_BASE}/audit-execution/batches/${batchId}/cancel`, { operator }),
+  handleConflict: (batchId, conflictType, description, decision, operator) =>
+    axios.post(`${API_BASE}/audit-execution/batches/${batchId}/conflict`, {
+      conflictType,
+      description,
+      decision,
+      operator
+    }),
+  recover: (batchId, operator) =>
+    axios.post(`${API_BASE}/audit-execution/batches/${batchId}/recover`, { operator }),
+  getLogs: (batchId) =>
+    axios.get(`${API_BASE}/audit-execution/batches/${batchId}/logs`),
+  getTimeline: (batchId) =>
+    axios.get(`${API_BASE}/audit-execution/batches/${batchId}/timeline`),
+  getRecoverySuggestion: (batchId) =>
+    axios.get(`${API_BASE}/audit-execution/batches/${batchId}/recovery-suggestion`),
+  checkDuplicate: (scenarioId) =>
+    axios.post(`${API_BASE}/audit-execution/check-duplicate`, { scenarioId }),
+  checkReplay: (batchNumber) =>
+    axios.post(`${API_BASE}/audit-execution/check-replay`, { batchNumber }),
+  listLogs: () =>
+    axios.get(`${API_BASE}/audit-execution/logs`),
+  getLogFile: (batchNumber) =>
+    axios.get(`${API_BASE}/audit-execution/logs/${batchNumber}`)
+};

@@ -902,6 +902,137 @@ npm test
 
 **所有测试通过 (10/10)**
 
+### v1.5.0 执行审计台模块
+
+#### 新增功能
+
+1. **执行审计台模块**
+   - 导航栏新增「执行审计台」入口
+   - 预检模式与真实执行模式彻底分离
+   - 界面实时显示当前配置模式
+   - 模式切换后批次创建、详情页和结果提示即时更新
+
+2. **批次追溯能力**
+   - 每个批次可追踪完整日志和明细
+   - 包含触发人、输入来源、命中项、冲突决策、失败原因、恢复结果和时间线
+   - 历史批次、跨重启后的批次可从历史列表点进查到同一份记录
+
+3. **日志索引落盘**
+   - 日志索引落到 SQLite 数据库
+   - 支持缺日志、重复提交、批次中断后恢复、同批次重放等场景处理
+   - 日志文件存储于 `data/audit-logs/` 目录
+
+4. **模式切换**
+   - 支持动态切换「仅预检」和「真实执行」模式
+   - 预检模式：仅检查，不实际执行变更
+   - 真实执行模式：实际执行变更并落盘
+
+5. **场景覆盖**
+   - 重复提交检测：同一场景的活跃批次不允许重复创建
+   - 同批次重放检测：已完成/已取消的批次不能重放
+   - 批次状态中断后恢复：提供恢复建议和下一步操作
+   - 旧日志缺失提示：日志文件不存在时给出明确提示
+
+#### 新增文件
+
+- [auditExecutionDao.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/dao/auditExecutionDao.js) - 执行审计台数据访问层
+- [auditExecutionService.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/services/auditExecutionService.js) - 执行审计台服务层
+- [auditExecution.js](file:///d:/workSpace/AI__SPACE/zyx-00112/server/routes/auditExecution.js) - 执行审计台路由层
+- [AuditExecutionPanel.js](file:///d:/workSpace/AI__SPACE/zyx-00112/client/src/components/AuditExecutionPanel.js) - 执行审计台前端组件
+
+#### 新增 API
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | /api/audit-execution/batches | 创建执行批次 |
+| GET | /api/audit-execution/batches | 获取批次列表 |
+| GET | /api/audit-execution/batches/:batchId | 获取批次详情 |
+| PUT | /api/audit-execution/batches/:batchId/mode | 切换执行模式 |
+| POST | /api/audit-execution/batches/:batchId/pre-check | 执行预检查 |
+| POST | /api/audit-execution/batches/:batchId/execute | 执行批次 |
+| POST | /api/audit-execution/batches/:batchId/cancel | 取消批次 |
+| POST | /api/audit-execution/batches/:batchId/recover | 恢复失败批次 |
+| GET | /api/audit-execution/batches/:batchId/logs | 获取批次日志 |
+| GET | /api/audit-execution/batches/:batchId/timeline | 获取时间线 |
+| POST | /api/audit-execution/check-duplicate | 检查重复提交 |
+| POST | /api/audit-execution/check-replay | 检查批次重放 |
+| GET | /api/audit-execution/logs | 列出日志文件 |
+
+#### 复现步骤
+
+1. **启动服务**
+   ```bash
+   npm start
+   ```
+
+2. **访问执行审计台**
+   - 打开浏览器访问 http://localhost:3000
+   - 点击导航栏「执行审计台」
+
+3. **创建批次**
+   - 输入操作者名称
+   - 选择目标场景
+   - 选择执行模式（仅预检 / 真实执行）
+   - 点击「创建批次」
+
+4. **执行流程**
+   - 点击「执行预检查」验证前置条件
+   - 点击「执行预检」或「确认执行」执行批次
+   - 查看批次详情、日志、时间线
+
+5. **查看历史批次**
+   - 在批次列表中点击任意批次
+   - 查看概览、操作记录、时间线、恢复结果
+
+#### 查询批次记录
+
+**通过 GUI 查询**
+1. 进入「执行审计台」页面
+2. 使用过滤器按状态、模式筛选
+3. 点击批次查看详情
+
+**通过 API 查询**
+```bash
+# 查询所有批次
+curl http://localhost:3000/api/audit-execution/batches
+
+# 按状态过滤
+curl "http://localhost:3000/api/audit-execution/batches?state=completed"
+
+# 按模式过滤
+curl "http://localhost:3000/api/audit-execution/batches?mode=preview"
+
+# 查看批次详情
+curl http://localhost:3000/api/audit-execution/batches/{batchId}
+
+# 查看日志文件列表
+curl http://localhost:3000/api/audit-execution/logs
+```
+
+**通过数据库查询**
+```bash
+sqlite3 data/sandbox.db
+sqlite> SELECT * FROM audit_execution_batches ORDER BY started_at DESC;
+sqlite> SELECT * FROM audit_log_entries WHERE batch_id = 'xxx';
+sqlite> SELECT * FROM audit_timeline WHERE batch_id = 'xxx';
+```
+
+#### 验证测试
+
+运行执行审计台验证测试:
+```bash
+node test/audit-execution-test.js
+```
+
+测试覆盖:
+- 配置切换生效
+- GUI 可见状态
+- 历史批次追溯
+- 日志落盘与跨重启可查
+- 重复提交检测
+- 批次重放检测
+- 恢复建议获取
+
 ### v1.4.0 独立取证工作台模块
 
 #### 新增功能

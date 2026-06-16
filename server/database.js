@@ -333,6 +333,94 @@ function initDatabase() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_timeline_order ON forensics_timeline(batch_id, event_order)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_replaced_batch ON forensics_replaced_snapshots(batch_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_forensics_recovery_batch ON forensics_recovery_records(batch_id)`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS audit_execution_batches (
+      id TEXT PRIMARY KEY,
+      batch_number TEXT UNIQUE NOT NULL,
+      operator TEXT NOT NULL,
+      operator_ip TEXT,
+      user_agent TEXT,
+      mode TEXT NOT NULL DEFAULT 'preview',
+      state TEXT NOT NULL DEFAULT 'pending',
+      scenario_id TEXT,
+      scenario_name TEXT,
+      input_source TEXT,
+      input_source_type TEXT,
+      hit_items TEXT,
+      conflict_decision TEXT,
+      failure_reason TEXT,
+      recovery_result TEXT,
+      started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      metadata TEXT,
+      FOREIGN KEY (scenario_id) REFERENCES scenarios(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS audit_log_entries (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      log_level TEXT NOT NULL,
+      log_type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      operator TEXT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      context TEXT,
+      error_code TEXT,
+      error_details TEXT,
+      FOREIGN KEY (batch_id) REFERENCES audit_execution_batches(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS audit_timeline (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      event_order INTEGER NOT NULL,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      actor TEXT,
+      action TEXT,
+      target_resource_type TEXT,
+      target_resource_id TEXT,
+      target_resource_name TEXT,
+      status TEXT,
+      details TEXT,
+      FOREIGN KEY (batch_id) REFERENCES audit_execution_batches(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS audit_conflict_decisions (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      conflict_type TEXT NOT NULL,
+      conflict_description TEXT,
+      decision TEXT NOT NULL,
+      decision_made_by TEXT,
+      decision_made_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (batch_id) REFERENCES audit_execution_batches(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS audit_recovery_records (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT NOT NULL,
+      resource_name TEXT,
+      original_state TEXT,
+      recovered_state TEXT,
+      recovery_status TEXT NOT NULL,
+      recovery_timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      verified INTEGER DEFAULT 0,
+      verified_by TEXT,
+      verified_at TEXT,
+      FOREIGN KEY (batch_id) REFERENCES audit_execution_batches(id)
+    )`);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_execution_batches_batch_number ON audit_execution_batches(batch_number)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_execution_batches_scenario ON audit_execution_batches(scenario_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_execution_batches_state ON audit_execution_batches(state)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_execution_batches_mode ON audit_execution_batches(mode)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_log_entries_batch ON audit_log_entries(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_timeline_batch ON audit_timeline(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_conflict_decisions_batch ON audit_conflict_decisions(batch_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_recovery_records_batch ON audit_recovery_records(batch_id)`);
   });
 }
 
